@@ -33,9 +33,13 @@ ABITRATE="96"
 ACHANNEL="2"
 
 TITLEFONT="Acknowledge TT BRK Regular 16"
-TITLETEXT="CR STEALTH block.III Broadcast Channel"
+TITLETEXT="CR STEALTH block.III"
 TITLEPOS="halign=left deltay=0 xpad=5 ypad=5"
 CLOCKFONT="Simpleton BRK 16"
+
+DESKTOPCAP_OPT="startx=1920 starty=0 endx=2120 endy=32"
+VIDEOBOX_OPT="border-alpha=0 top=-10 left=-10"
+
 
 if [ "${RTMP_URI}" != "__cameratest__" ]; then
   if [ "${STREAM}" != "__local__" ]; then
@@ -51,22 +55,29 @@ if [ "`which guvcview`" ]; then
   HAS_GUVCVIEW="yes"
 fi
 
-# 
+# --- Install v4l2loopback module
 if ! lsmod | grep -q v4l2loopback; then
    sudo modprobe v4l2loopback
 fi
 
-gst-launch v4l2src device=${CAMERA_SOURCE} ! \
-           "video/x-raw-yuv,width=${WIDTH},height=${HEIGHT},bitrate=${FPS}/1" ! \
-           clockoverlay halign="right" valign="top" font-desc="$CLOCKFONT" time-format="%H:%M" shaded-background=yes ! \
-           textoverlay text="$TITLETEXT" font-desc="$TITLEFONT" $TITLEPOS shaded-background=yes ! \
-           tee name=m ! \
-                   queue ! v4l2sink device=${VIDEO_SOURCE} \
-              m. ! queue ! xvimagesink &
+# --- Webcam stream send with editing to dummy device.
+# FIXME: Problem that framerate down to half using videomix element.
+gst-launch \
+  v4l2src device=${CAMERA_SOURCE} ! videorate ! \
+    "video/x-raw-yuv,width=${WIDTH},height=${HEIGHT},framerate=${FPS}/1" ! \
+    clockoverlay halign="right" valign="top" font-desc="$CLOCKFONT" time-format="%H:%M" shaded-background=yes ! \
+    textoverlay text="$TITLETEXT" font-desc="$TITLEFONT" $TITLEPOS shaded-background=yes ! \
+    tee name=m ! queue2 ! v4l2sink device=${VIDEO_SOURCE} \
+  m. ! queue2 ! xvimagesink \
+  & 
+
+# --- Waiting for a while ready to startup gst-launch.
 sleep 3
 
-[ "$HAS_GUVCVIEW" = "yes" ] && guvcview -o &
+# --- startup Webcam controller, if available.
+[ "$HAS_GUVCVIEW" = "yes" ] && guvcview -o >/dev/null 2>&1 &
 
+# --- Muxing video/audio and starting stream with ffmpeg to server.
 if [ "$RTMP_URI" != "__cameratest__" ]; then
   ffmpeg -v 1 -threads 0 \
          -f video4linux2 -i ${VIDEO_SOURCE} -bt ${VBITRATE}k \
