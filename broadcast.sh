@@ -37,9 +37,6 @@ TITLETEXT="CR STEALTH block.III"
 TITLEPOS="halign=left deltay=0 xpad=5 ypad=5"
 CLOCKFONT="Simpleton BRK 16"
 
-DESKTOPCAP_OPT="startx=1920 starty=0 endx=2120 endy=32"
-VIDEOBOX_OPT="border-alpha=0 top=-10 left=-10"
-
 
 if [ "${RTMP_URI}" != "__cameratest__" ]; then
   if [ "${STREAM}" != "__local__" ]; then
