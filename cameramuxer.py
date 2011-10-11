@@ -34,18 +34,32 @@ class CameraMuxerWindow(gtk.Window):
   # ===
   def build_window(self):
     self.set_title("Camera Muxer")
-    self.set_default_size(500, 400)
+    self.set_default_size(800, 500)
     self.connect("delete-event", self.on_delete)
     self.connect("destroy", self.on_destroy)
 
+    vbox_root = gtk.VBox()
+    vbox_root.set_border_width(4)
+    self.add(vbox_root)
+
+    filemenutop = gtk.MenuItem(u'ファイル')
+    filemenu = gtk.Menu()
+    filemenutop.set_submenu(filemenu)
+    menu_quit = gtk.MenuItem(u'終了')
+    filemenu.append(menu_quit)
+    menubar = gtk.MenuBar()
+    menubar.append(filemenutop)
+    vbox_root.pack_start(menubar, False)
+
+    hbox = gtk.HBox()
+    hbox.set_spacing(8)
+    vbox_root.pack_start(hbox, True)
+
+    self.movie_window = gtk.DrawingArea()
+    hbox.pack_start(self.movie_window, True)
+
     vbox = gtk.VBox()
-    vbox.set_border_width(8)
-    self.add(vbox)
-
-#    self.movie_window = gtk.DrawingArea()
-#    self.add(self.movie_window)
-#     vbox.add(self.movie_window)
-
+    hbox.pack_end(vbox, False)
     self.ent_text = gtk.TextView()
     vbox.pack_start(self.ent_text, True)
     self.btn_update = gtk.Button("Update")
@@ -104,14 +118,25 @@ class CameraMuxerWindow(gtk.Window):
     capsfilter = gst.element_factory_make('capsfilter')
     capsfilter.set_property('caps', self.cameracaps)
     videorate = gst.element_factory_make('videorate')
-    textarea = gst.element_factory_make('textoverlay')
-    outputsink = gst.element_factory_make('v4l2sink')
-    outputsink.set_property('device', '/dev/video1')
+    self.textarea = gst.element_factory_make('textoverlay')
+    self.v4l2sink = gst.element_factory_make('v4l2sink', 'v4l2')
+    self.v4l2sink.set_property('device', '/dev/video1')
+    self.avsink = gst.element_factory_make('autovideosink')
 
-    self.player.add(camerasource, videorate, capsfilter, textarea, outputsink)
-    gst.element_link_many(camerasource, videorate, capsfilter, textarea, outputsink)
+    tee = gst.element_factory_make('tee')
+    self.queue1 = gst.element_factory_make('queue')
+    self.queue2 = gst.element_factory_make('queue')
 
-    self.textarea = textarea
+    self.player.add(camerasource, videorate, capsfilter, self.textarea, self.v4l2sink,
+                    self.avsink, tee, self.queue1, self.queue2)
+                 
+    gst.element_link_many(camerasource, videorate, capsfilter, self.textarea, tee)
+    gst.element_link_many(tee, self.queue1, self.v4l2sink)
+    gst.element_link_many(tee, self.queue2, self.avsink)
+
+    # tee.get_request_pad('src%d').link(self.queue1.get_pad('sink'))
+    # tee.get_request_pad('src%d').link(self.queue2.get_pad('sink'))
+
 
 
   def init_bus(self):
@@ -130,6 +155,13 @@ class CameraMuxerWindow(gtk.Window):
   def on_sync_message(self, bus, message):
     if message.structure is None:
       return
+    message_name = message.structure.get_name()
+    if message_name == "prepare-xwindow-id":
+      imagesink = message.src
+      imagesink.set_property("force-aspect-ratio", True)
+      gtk.gdk.threads_enter()
+      imagesink.set_xwindow_id(self.movie_window.window.xid)
+      gtk.gdk.threads_leave()
 
   #---
   def main(self):
