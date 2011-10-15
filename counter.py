@@ -50,7 +50,7 @@ def main():
               counts[i*N_PORT_GROUP+BIT_COUNT] = 0
 
     with codecs.open(write_file, "w", "utf-8") as f:
-      countstr = u"""<span font-desc="Acknowledge TT BRK Regular 20">Count: <span size="x-large">{0}</span>/{1}\nBonus: <big>{2}</big></span>""" \
+      countstr = u"""<span font-desc="Acknowledge TT BRK Regular 20"><small>Count:</small> <span size="x-large">{0}</span>/{1}\n<small>Bonus:</small> <big>{2}</big></span>""" \
                  .format(counts[BIT_COUNT], counts[BIT_TOTALCOUNT], counts[BIT_BONUS])
       f.write(countstr)
     time.sleep(0.2)

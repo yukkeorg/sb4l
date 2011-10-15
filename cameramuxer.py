@@ -21,6 +21,9 @@ SRC_WIDTH = '640'
 SRC_HEIGHT = '480'
 SRC_FRAMERATE = '30/1'
 
+TITLE = u'<span font-desc="Acknowledge TT BRK Regular 16">CR stealth block.III</span>'
+
+
 class CameraMuxerWindow(gtk.Window):
   def __init__(self):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
@@ -47,29 +50,84 @@ class CameraMuxerWindow(gtk.Window):
     self.menubar = self.build_menu()
     vbox_root.pack_start(self.menubar, False)
 
-    hbox = gtk.HBox()
-    hbox.set_spacing(8)
-    vbox_root.pack_start(hbox, True)
+    vbox_main = gtk.VBox()
+    vbox_main.set_spacing(8)
+    vbox_root.pack_start(vbox_main, True)
 
     self.movie_window = gtk.DrawingArea()
-    hbox.pack_start(self.movie_window, True)
+    vbox_main.pack_start(self.movie_window, True)
 
-    vbox = gtk.VBox()
-    hbox.pack_end(vbox, False)
-    #self.ent_text = gtk.TextView()
-    #vbox.pack_start(self.ent_text, True)
-    #self.btn_update = gtk.Button("Update")
-    #self.btn_update.connect("clicked", self.on_update)
-    #vbox.pack_start(self.btn_update, False)
-    self.lbl_streamingstatus = gtk.Label()
-    self.lbl_streamingstatus.set_text("Streaming is stopped.")
-    vbox.pack_end(self.lbl_streamingstatus, False)
-    self.btn_startstop = gtk.ToggleButton("Streaming")
-    self.btn_startstop.connect("toggled", self.on_startstop)
-    vbox.pack_end(self.btn_startstop, False)
+    self.btn_camera_tgl = gtk.ToggleButton("Camera Off")
+    self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
+    vbox_main.pack_start(self.btn_camera_tgl, False, False)
+
+    vbox_main.pack_start(self.build_telop_box(), False)
+    vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
 
+
+  def build_telop_box(self):
+    hbox = gtk.HBox()
+    hbox.set_spacing(8)
+
+    vbox_left = gtk.VBox()
+    vbox_left.set_spacing(8)
+    hbox.pack_start(vbox_left, True)
+
+    self.cmb_select_text_loc = gtk.combo_box_new_text()
+    vbox_left.pack_start(self.cmb_select_text_loc, False)
+
+    scroll_text_view = gtk.ScrolledWindow()
+    scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+
+    self.ent_text = gtk.TextView()
+    self.ent_text.get_buffer().set_text(TITLE)
+
+    scroll_text_view.add(self.ent_text)
+    vbox_left.pack_start(scroll_text_view, True)
+
+    hbox.pack_start(vbox_left, True)
+
+    vbox_right = gtk.VBox()
+    hbox.pack_end(vbox_right, False)
+
+    self.btn_update = gtk.Button("Update")
+    self.btn_update.connect("clicked", self.on_update)
+    vbox_right.pack_start(self.btn_update, False)
+
+    return hbox
+
+
+  def build_streaming_box(self):
+    hbox = gtk.HBox()
+    hbox.set_spacing(8)
+
+    vbox_left = gtk.VBox()
+    vbox_left.set_spacing(8)
+    hbox.pack_start(vbox_left)
+
+    vbox_left.pack_start(gtk.Label("Streaming Command-line"), False)
+
+    scroll_text_view = gtk.ScrolledWindow()
+    scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+
+    self.ent_stream_cmdline = gtk.TextView()
+
+    scroll_text_view.add(self.ent_stream_cmdline)
+    vbox_left.pack_start(scroll_text_view)
+
+    vbox_right = gtk.VBox()
+    vbox_right.set_spacing(8)
+    hbox.pack_start(vbox_right, False)
+
+    self.lbl_streamingstatus = gtk.Label()
+    self.lbl_streamingstatus.set_text("Streaming is stopped.")
+    vbox_right.pack_end(self.lbl_streamingstatus, False)
+    self.btn_startstop = gtk.ToggleButton("Streaming")
+    vbox_right.pack_end(self.btn_startstop, False)
+
+    return hbox
 
   def build_menu(self):
     menu_quit = gtk.MenuItem(u'終了')
@@ -95,13 +153,12 @@ class CameraMuxerWindow(gtk.Window):
     if self.timer:
       gobject.source_remove(self.timer)
 
-
   #---
   def on_interval_timer(self):
     text = self.readFromFile("~/counter.txt")
     self.textarea_bottomleft.set_property("text", text)
-    self.testcnt += 1
     return True 
+
 
   def on_update(self, widget, *args):
     if self.player is None:
@@ -109,20 +166,21 @@ class CameraMuxerWindow(gtk.Window):
     buf = self.ent_text.get_buffer()
     start, end = buf.get_bounds()
     text = buf.get_text(start, end)
-    self.textarea.set_property("text", text)
+    self.textarea_topright.set_property("text", text)
 
-  def on_startstop(self, widget, *args):
+
+  def on_camera_startstop(self, widget, *args):
     if self.player is None:
       return
 
     if widget.get_active(): 
       self.create_timer()
       self.player.set_state(gst.STATE_PLAYING)
-      self.lbl_streamingstatus.set_text("Streraming is started.")
+      self.btn_camera_tgl.set_label("Camera On")
     else:
       self.destroy_timer()
       self.player.set_state(gst.STATE_NULL)
-      self.lbl_streamingstatus.set_text("Streraming is stopped.")
+      self.btn_camera_tgl.set_label("Camera Off")
 
 
   def on_delete(self, widget, *args):
@@ -172,6 +230,7 @@ class CameraMuxerWindow(gtk.Window):
     gst.element_link_many(tee, queue1, self.v4l2sink)
     gst.element_link_many(tee, queue2, self.avsink)
 
+
   def setup_elements(self):
     self.camerasource.set_property('device', '/dev/video0')
     self.v4l2sink.set_property('device', '/dev/video1')
@@ -181,16 +240,19 @@ class CameraMuxerWindow(gtk.Window):
     self.textarea_topleft.set_property("line-alignment", "left")
     self.textarea_topleft.set_property("xpad", 10)
     self.textarea_topleft.set_property("ypad", 10)
+
     self.textarea_topright.set_property("halignment", "right")
     self.textarea_topright.set_property("valignment", "top")
     self.textarea_topright.set_property("line-alignment", "right")
     self.textarea_topright.set_property("xpad", 10)
     self.textarea_topright.set_property("ypad", 10)
+
     self.textarea_bottomleft.set_property("halignment", "left")
     self.textarea_bottomleft.set_property("valignment", "bottom")
     self.textarea_bottomleft.set_property("line-alignment", "left")
     self.textarea_bottomleft.set_property("xpad", 10)
     self.textarea_bottomleft.set_property("ypad", 10)
+
     self.textarea_bottomright.set_property("halignment", "left")
     self.textarea_bottomright.set_property("valignment", "bottom")
     self.textarea_bottomright.set_property("line-alignment", "right")
@@ -214,6 +276,7 @@ class CameraMuxerWindow(gtk.Window):
       msg = message.parse_error()
       print(u"{0}\n{1}".format(*msg))
 
+
   def on_sync_message(self, bus, message):
     if message.structure is None:
       return
@@ -225,7 +288,6 @@ class CameraMuxerWindow(gtk.Window):
       imagesink.set_xwindow_id(self.movie_window.window.xid)
       gtk.gdk.threads_leave()
 
-  #--
 
   def readFromFile(self, filename):
     filename = os.path.normpath(os.path.expanduser(filename))

@@ -15,13 +15,14 @@
 #  - guvcview
 # 
 
-RTMP_URI="${l:-dummy.swf}"
+RTMP_URI="${1:-dummy.swf}"
 STREAM="$2"
 
 # --- Settings ---
+WEBCAMCONF="${HOME}/.default.gpfl"
 VIDEO_SOURCE="/dev/video1"
 FPS="30"
-VBITRATE="300"
+VBITRATE="280"
 
 AUDIO_SOURCE="pulse"
 ASAMPLINGRATE="44100"
@@ -36,8 +37,10 @@ else
   OUTPUT_URI="${RTMP_URI}"
 fi
 
+HAS_UVCDYNCTRL="no"
 HAS_GUVCVIEW="no"
-if [ "`which guvcview`" ]; then
+if [ "`which guvcview`" -a -f "${WEBCAMCONF}" ]
+then
   HAS_GUVCVIEW="yes"
 fi
 
@@ -46,11 +49,11 @@ if ! lsmod | grep -q v4l2loopback; then
    sudo modprobe v4l2loopback
 fi
 
-python counter.py &
-python cameramuxer.py &
-
 # --- startup Webcam controller, if available.
-[ "$HAS_GUVCVIEW" = "yes" ] && guvcview -o >/dev/null 2>&1 &
+[ "$HAS_UVCDYNCTRL" = "yes" ] && uvcdynctrl -L "$WEBCAMCONF"
+[ "$HAS_GUVCVIEW" = "yes" ] && guvcview -o -l "$WEBCAMCONF" >/dev/null 2>&1 &
+
+sleep 3
 
 echo "配信の準備ができたら Enterキーを押してください。"
 read dummy
