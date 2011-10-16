@@ -39,9 +39,12 @@ fi
 
 HAS_UVCDYNCTRL="no"
 HAS_GUVCVIEW="no"
-if [ "`which guvcview`" -a -f "${WEBCAMCONF}" ]
-then
-  HAS_GUVCVIEW="yes"
+if [ "`which uvcdynctrl`" -a -f "$WEBCAMCONF" ]; then
+  HAS_UVCDYNCTRL="yes"
+else
+  if [ "`which guvcview`" ]; then
+    HAS_GUVCVIEW="yes"
+  fi
 fi
 
 # --- Install v4l2loopback module
@@ -50,7 +53,7 @@ if ! lsmod | grep -q v4l2loopback; then
 fi
 
 # --- startup Webcam controller, if available.
-[ "$HAS_UVCDYNCTRL" = "yes" ] && uvcdynctrl -L "$WEBCAMCONF"
+[ "$HAS_UVCDYNCTRL" = "yes" ] && uvcdynctrl -L "$WEBCAMCONF" >/dev/null 2>&1 
 [ "$HAS_GUVCVIEW" = "yes" ] && guvcview -o -l "$WEBCAMCONF" >/dev/null 2>&1 &
 
 sleep 3
@@ -59,12 +62,12 @@ echo "配信の準備ができたら Enterキーを押してください。"
 read dummy
 
 # --- Muxing video/audio and starting stream with ffmpeg to server.
-ffmpeg -v 1 -threads 0 \
+ffmpeg -y -stats -threads 0 \
        -f video4linux2 -i ${VIDEO_SOURCE} -bt ${VBITRATE}k \
        -f alsa -i ${AUDIO_SOURCE} -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} -async 1 \
-       -vcodec libx264 -vpre medium -x264opts "bitrate=${VBITRATE}" \
-       -acodec libmp3lame \
-       -f flv  -r ${FPS} \
-       -y "${OUTPUT_URI}" &
+       -vcodec libx264 -vpre veryfast -x264opts "bitrate=${VBITRATE}" -level 31 \
+       -acodec libfaac \
+       -f flv -r ${FPS} \
+       "${OUTPUT_URI}" &
 
 wait 

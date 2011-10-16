@@ -87,7 +87,6 @@ class CameraMuxerWindow(gtk.Window):
     scroll_text_view.add(self.ent_text)
     vbox_left.pack_start(scroll_text_view, True)
 
-    hbox.pack_start(vbox_left, True)
 
     vbox_right = gtk.VBox()
     hbox.pack_end(vbox_right, False)
@@ -116,6 +115,7 @@ class CameraMuxerWindow(gtk.Window):
 
     scroll_text_view.add(self.ent_stream_cmdline)
     vbox_left.pack_start(scroll_text_view)
+
 
     vbox_right = gtk.VBox()
     vbox_right.set_spacing(8)
@@ -212,7 +212,7 @@ class CameraMuxerWindow(gtk.Window):
     self.textarea_bottomleft = gst.element_factory_make('textoverlay')
     self.textarea_bottomright = gst.element_factory_make('textoverlay')
     self.v4l2sink = gst.element_factory_make('v4l2sink', 'v4l2')
-    self.avsink = gst.element_factory_make('autovideosink')
+    self.avsink = gst.element_factory_make('xvimagesink')
 
     tee = gst.element_factory_make('tee')
     queue1 = gst.element_factory_make('queue')
