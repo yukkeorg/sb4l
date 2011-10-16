@@ -64,13 +64,13 @@ class Counter(object):
   def output(self):
     counts = self.counts[0]
     try:
-      bonus_rate = "1/{0:.2f}".format(float(counts[CNT_EXT_TOTALCOUNT]) / counts[CNT_CHANCE])
+      bonus_rate = "1/{0:.1f}".format(float(counts[CNT_EXT_TOTALCOUNT]) / counts[CNT_CHANCE])
     except ZeroDivisionError:
-      bonus_rate = "1/-.--"
+      bonus_rate = "1/-.-"
 
     combo = ""
     if counts[CNT_EXT_COMBO] > 0:
-      combo = "{0} bonus combo".format(counts[CNT_EXT_COMBO])
+      combo = '<span size="x-large">{0}</span> bonus combo'.format(counts[CNT_EXT_COMBO])
 
       
     countstr = u"""<span font-desc="Acknowledge TT BRK Regular 18"><small>Count:</small> <span size="x-large">{0}</span>/{1}\n<small>Bonus:</small> <span size="x-large">{2}</span>/{3} ({4}) {5}</span>""" \
@@ -86,28 +86,35 @@ class Counter(object):
   def countup(self):
     port0, port1 = self.usbio.send2read()
     port = (port1 << 8) + port0 
+    # グループ単位で処理
     for i in xrange(N_PORT_GROUP):
       bitgroup = port & 0x0f;
       port = port >> 4
+      # カウンター、ボーナス、チャンス の状態をそれぞれチェック
       for j in (BIT_COUNT, BIT_BONUS, BIT_CHANCE):
         idx = i * N_BIT_GROUP + j
         tbit = 1 << idx
         if bitgroup & (1 << j):
+          # 状態がOff→Onになるとき
           if self.isOn & tbit == 0:
             self.isOn = self.isOn | tbit
             self.counts[i][j] += 1
+            # それがカウンターだったら 
             if j == BIT_COUNT:
               self.counts[i][CNT_EXT_TOTALCOUNT] += 1
+            # それがボーナスだったら 
             elif j == BIT_BONUS:
               cbit = i * N_BIT_GROUP + BIT_CHANCE
               if bitgroup & cbit:
                 self.counts[i][CNT_EXT_COMBO] += 1
-
         else:
+          # 状態がOn→Offになるとき
           if self.isOn & tbit:
             self.isOn = self.isOn & (~tbit)
+            # それがボーナスだったら
             if j == BIT_BONUS:
               self.counts[i][BIT_COUNT] = 0
+            # それがボーナス+時短だったら
             elif j == BIT_CHANCE:
               self.counts[i][CNT_EXT_COMBO] = 0
 
