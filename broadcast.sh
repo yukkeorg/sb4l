@@ -8,7 +8,7 @@
 # 
 # Required tool:
 #  - Gstreamer >= 0.10
-#  - ffmpeg with librtmp
+#  - ffmpeg (compiled with librtmp, libx264, libfaac)
 #  - v4l2looopback 
 # 
 # Optional tool:
@@ -65,7 +65,7 @@ read dummy
 ffmpeg -y -stats -threads 0 \
        -f video4linux2 -i ${VIDEO_SOURCE} -bt ${VBITRATE}k \
        -f alsa -i ${AUDIO_SOURCE} -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} -async 1 \
-       -vcodec libx264 -vpre veryfast -x264opts "bitrate=${VBITRATE}" -level 31 \
+       -vcodec libx264 -vpre fast -x264opts "bitrate=${VBITRATE}" -level 31 \
        -acodec libfaac \
        -f flv -r ${FPS} \
        "${OUTPUT_URI}" &

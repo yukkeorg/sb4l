@@ -87,7 +87,6 @@ class CameraMuxerWindow(gtk.Window):
     scroll_text_view.add(self.ent_text)
     vbox_left.pack_start(scroll_text_view, True)
 
-
     vbox_right = gtk.VBox()
     hbox.pack_end(vbox_right, False)
 
@@ -116,7 +115,6 @@ class CameraMuxerWindow(gtk.Window):
     scroll_text_view.add(self.ent_stream_cmdline)
     vbox_left.pack_start(scroll_text_view)
 
-
     vbox_right = gtk.VBox()
     vbox_right.set_spacing(8)
     hbox.pack_start(vbox_right, False)
@@ -128,6 +126,7 @@ class CameraMuxerWindow(gtk.Window):
     vbox_right.pack_end(self.btn_startstop, False)
 
     return hbox
+
 
   def build_menu(self):
     menu_quit = gtk.MenuItem(u'終了')
@@ -298,12 +297,9 @@ class CameraMuxerWindow(gtk.Window):
         text = u'Not Found'
     return text
 
-  #---
-  def main(self):
-    gtk.gdk.threads_init()
-    gtk.main()
 
 if __name__ == "__main__":
   cm = CameraMuxerWindow()
-  cm.main()
+  gtk.gdk.threads_init()
+  gtk.main()
 

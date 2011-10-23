@@ -64,16 +64,16 @@ class Counter(object):
   def output(self):
     counts = self.counts[0]
     try:
-      bonus_rate = "1/{0:.1f}".format(float(counts[CNT_EXT_TOTALCOUNT]) / counts[CNT_CHANCE])
+      bonus_rate = "1/{0:.1f}".format(float(counts[CNT_EXT_TOTALCOUNT]) / counts[CNT_BONUS])
     except ZeroDivisionError:
       bonus_rate = "1/-.-"
 
     combo = ""
     if counts[CNT_EXT_COMBO] > 0:
-      combo = '<span size="x-large">{0}</span> bonus combo'.format(counts[CNT_EXT_COMBO])
+      combo = '\n<span size="x-large">{0:3}</span> LockOn!'.format(counts[CNT_EXT_COMBO])
 
       
-    countstr = u"""<span font-desc="Acknowledge TT BRK Regular 18"><small>Count:</small> <span size="x-large">{0}</span>/{1}\n<small>Bonus:</small> <span size="x-large">{2}</span>/{3} ({4}) {5}</span>""" \
+    countstr = u"""<span font-desc="Ricty Bold 15">GameCount:\n<span size="x-large">{0:3}</span>/{1}\nBonusCount:\n<span size="x-large">{2:3}</span>/{3} ({4}){5}</span>""" \
            .format(counts[BIT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
                    counts[BIT_BONUS], counts[BIT_CHANCE], 
                    bonus_rate, combo)
