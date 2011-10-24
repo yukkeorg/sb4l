@@ -37,15 +37,6 @@ else
   OUTPUT_URI="${RTMP_URI}"
 fi
 
-HAS_UVCDYNCTRL="no"
-HAS_GUVCVIEW="no"
-if [ "`which uvcdynctrl`" -a -f "$WEBCAMCONF" ]; then
-  HAS_UVCDYNCTRL="yes"
-else
-  if [ "`which guvcview`" ]; then
-    HAS_GUVCVIEW="yes"
-  fi
-fi
 
 # --- Install v4l2loopback module
 if ! lsmod | grep -q v4l2loopback; then
@@ -53,8 +44,7 @@ if ! lsmod | grep -q v4l2loopback; then
 fi
 
 # --- startup Webcam controller, if available.
-[ "$HAS_UVCDYNCTRL" = "yes" ] && uvcdynctrl -L "$WEBCAMCONF" >/dev/null 2>&1 
-[ "$HAS_GUVCVIEW" = "yes" ] && guvcview -o -l "$WEBCAMCONF" >/dev/null 2>&1 &
+guvcview -o -l "$WEBCAMCONF" >/dev/null 2>&1 &
 
 sleep 3
 
@@ -65,7 +55,7 @@ read dummy
 ffmpeg -y -stats -threads 0 \
        -f video4linux2 -i ${VIDEO_SOURCE} -bt ${VBITRATE}k \
        -f alsa -i ${AUDIO_SOURCE} -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} -async 1 \
-       -vcodec libx264 -vpre fast -x264opts "bitrate=${VBITRATE}" -level 31 \
+       -vcodec libx264 -vpre slow -x264opts "bitrate=${VBITRATE}" -level 31 \
        -acodec libfaac \
        -f flv -r ${FPS} \
        "${OUTPUT_URI}" &
