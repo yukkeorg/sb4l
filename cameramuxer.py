@@ -18,6 +18,7 @@ pygst.require('0.10')
 import gst
 
 _SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
+_N_TEXTAREA = 4
 
 class Setting(object):
   def __init__(self):
@@ -27,8 +28,7 @@ class Setting(object):
     self.SRC_HEIGHT = '480'
     self.SRC_FRAMERATE = '30/1'
     self.DST_DEVICE = '/dev/video1'
-    self.TITLE = u'<span font-desc="Acknowledge TT BRK Regular 16">CR stealth block.III</span>'
-
+    self.TEXTAREA_PROPERTIES = [ {} for i in xrange(_N_TEXTAREA) ]
 
 def saveSetting(fn, s):
   with open(fn, "wb") as f:
@@ -42,17 +42,14 @@ def loadSetting(fn):
   except:
     return None
       
-setting = loadSetting(_SETTING_FILENAME) or Setting()
+# setting = loadSetting(_SETTING_FILENAME) or Setting()
+setting = Setting()
 
 
-class WebcamStudio(object):
-  def __init__(self, prev_panel):
+class WebcamComposer(object):
+  def __init__(self, prev_panel=None):
     self.prev_panel = prev_panel
-    self.player = None
-
     self.build_player()
-    self.setup_elements()
-    self.init_bus()
 
 
   def build_player(self):
@@ -66,10 +63,9 @@ class WebcamStudio(object):
     capsfilter = gst.element_factory_make('capsfilter')
     capsfilter.set_property('caps', self.cameracaps)
     videorate = gst.element_factory_make('videorate')
-    self.textarea_topleft = gst.element_factory_make('textoverlay')
-    self.textarea_topright = gst.element_factory_make('textoverlay')
-    self.textarea_bottomleft = gst.element_factory_make('textoverlay')
-    self.textarea_bottomright = gst.element_factory_make('textoverlay')
+    self.textareas = []
+    for i in xrange(_N_TEXTAREA):
+      self.textareas.append(gst.element_factory_make('textoverlay'))
     self.v4l2sink = gst.element_factory_make('v4l2sink', 'v4l2')
     self.avsink = gst.element_factory_make('xvimagesink')
 
@@ -77,49 +73,26 @@ class WebcamStudio(object):
     queue1 = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
 
-    self.player.add(self.camerasource, videorate, capsfilter, 
-                    self.textarea_topleft, self.textarea_topright,
-                    self.textarea_bottomleft, self.textarea_bottomright,
-                    self.v4l2sink, self.avsink, tee, queue1, queue2)
-
-    gst.element_link_many(self.camerasource, videorate, capsfilter, 
-                          self.textarea_topleft, self.textarea_topright,
-                          self.textarea_bottomleft, self.textarea_bottomright,
-                          tee)
+    self.player.add(self.camerasource, videorate, capsfilter,
+                    self.v4l2sink, self.avsink, tee, queue1, queue2, 
+                    *self.textareas)
+    elements = [self.camerasource, videorate, capsfilter] + self.textareas + [tee]
+    gst.element_link_many(*elements)
     gst.element_link_many(tee, queue1, self.v4l2sink)
     gst.element_link_many(tee, queue2, self.avsink)
 
 
-  def setup_elements(self):
     self.camerasource.set_property('device', '/dev/video0')
     self.v4l2sink.set_property('device', '/dev/video1')
 
-    self.textarea_topleft.set_property("halignment", "left")
-    self.textarea_topleft.set_property("valignment", "top")
-    self.textarea_topleft.set_property("line-alignment", "left")
-    self.textarea_topleft.set_property("xpad", 10)
-    self.textarea_topleft.set_property("ypad", 10)
-
-    self.textarea_topright.set_property("halignment", "right")
-    self.textarea_topright.set_property("valignment", "top")
-    self.textarea_topright.set_property("line-alignment", "right")
-    self.textarea_topright.set_property("xpad", 10)
-    self.textarea_topright.set_property("ypad", 10)
-
-    self.textarea_bottomleft.set_property("halignment", "left")
-    self.textarea_bottomleft.set_property("valignment", "bottom")
-    self.textarea_bottomleft.set_property("line-alignment", "left")
-    self.textarea_bottomleft.set_property("xpad", 10)
-    self.textarea_bottomleft.set_property("ypad", 10)
-
-    self.textarea_bottomright.set_property("halignment", "left")
-    self.textarea_bottomright.set_property("valignment", "bottom")
-    self.textarea_bottomright.set_property("line-alignment", "right")
-    self.textarea_bottomright.set_property("xpad", 10)
-    self.textarea_bottomright.set_property("ypad", 10)
+    for textarea in self.textareas:
+      textarea.set_property("halignment", "left")  # left, right, center
+      textarea.set_property("valignment", "top")   # top, bottom, center
+      textarea.set_property("line-alignment", "left")  # left, right
+      textarea.set_property("xpad", 10)
+      textarea.set_property("ypad", 10)
 
 
-  def init_bus(self):
     bus = self.player.get_bus()
     bus.add_signal_watch()
     bus.enable_sync_message_emission()
@@ -128,10 +101,44 @@ class WebcamStudio(object):
 
 
   def set_state(self, state):
-    if self.player:
-      self.player.set_state(state)
+    self.player.set_state(state)
 
-    
+
+  def set_textarea_property(self, no, propdict):
+    try:
+      textarea = self.textareas[no]
+    except IndexError:
+      return 
+
+    for name, value in propdict.iteritems():
+      textarea.set_property(name, value)
+
+
+  def set_textarea_properties(self, propdictlist):
+    for no, propdict in propdictlist:
+      self.set_textarea_property(no, propdict)
+
+
+  def get_textarea_property(self, no):
+    try:
+      textarea = self.textareas[no]
+    except IndexError:
+      return None
+
+    properties = {}
+    for prop in ("halignment", "valignment", "line-alignment", "xpad", "ypad", "text"):
+      value = ta.get_property(prop)
+      properties[prop] = value
+    return (no, properties)
+
+
+  def get_textarea_properties(self):
+    return [ self.get_textarea_properties(i) for i in xrange(len(self.textareas)) ]
+
+
+  #########
+  # Event #
+  #########
   def on_message(self, bus, message):
     type = message.type
     if type == gst.MESSAGE_EOS:
@@ -145,7 +152,7 @@ class WebcamStudio(object):
     if message.structure is None:
       return
     message_name = message.structure.get_name()
-    if message_name == "prepare-xwindow-id":
+    if self.prev_panel and message_name == "prepare-xwindow-id":
       imagesink = message.src
       imagesink.set_property("force-aspect-ratio", True)
       gtk.gdk.threads_enter()
@@ -154,15 +161,18 @@ class WebcamStudio(object):
 
 
 class StdoutReader(object):
-  def __init__(self, executable):
-    self.subp = subprocess.Popen(executable, stdout=subprocess.PIPE, close_fds=True)
+  def __init__(self, cmd_and_args):
+    try:
+      self.subp = subprocess.Popen(cmd_and_args, stdout=subprocess.PIPE, close_fds=True)
+    except OSError:
+      return
     glib.io_add_watch(self.subp.stdout, glib.IO_IN | glib.IO_HUP, self._event)
 
-  def _event(self, fd, condition, *argv):
+
+  def _event(self, fd, condition):
     if self.subp:
       if condition & glib.IO_IN:
         data = fd.read()
-        print(data)
         if self.subp.poll():
           self.subp = None
           return False
@@ -181,14 +191,13 @@ class StdoutReader(object):
 class CameraMuxerWindow(gtk.Window):
   def __init__(self):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
-    self.timer = None
+    # self.timer = None
+    self.player = None
+    self.buildWindow()
+    self.loadCameraSettings()
 
-    self.build_window()
-    self.player = WebcamStudio(self.movie_window)
 
-
-  # ===
-  def build_window(self):
+  def buildWindow(self):
     self.set_title("Camera Muxer")
     self.set_default_size(800, 600)
     self.connect("delete-event", self.on_delete)
@@ -204,47 +213,98 @@ class CameraMuxerWindow(gtk.Window):
     vbox_main.set_spacing(8)
     vbox_root.pack_start(vbox_main, True)
 
-    self.movie_window = gtk.DrawingArea()
-    vbox_main.pack_start(self.movie_window, True)
-
-    self.btn_camera_tgl = gtk.ToggleButton("Camera Off")
-    self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
-    vbox_main.pack_start(self.btn_camera_tgl, False, False)
-
+    vbox_main.pack_start(self.build_preview_box(), True)
     vbox_main.pack_start(self.build_telop_box(), False)
     vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
 
 
-  def build_telop_box(self):
+  def build_preview_box(self):
+    vbox = gtk.VBox()
+
     hbox = gtk.HBox()
     hbox.set_spacing(8)
+    vbox.pack_start(hbox, False)
 
-    vbox_left = gtk.VBox()
-    vbox_left.set_spacing(8)
-    hbox.pack_start(vbox_left, True)
+    label1 = gtk.Label("Source:")
+    hbox.pack_start(label1, False)
+    self.ent_camera_src = gtk.Entry()
+    self.ent_camera_src.set_size_request(150, -1)
+    hbox.pack_start(self.ent_camera_src, False)
 
-    self.cmb_select_text_loc = gtk.combo_box_new_text()
-    vbox_left.pack_start(self.cmb_select_text_loc, False)
+    label2 = gtk.Label("Width:")
+    hbox.pack_start(label2, False)
+    self.ent_camera_width = gtk.Entry()
+    self.ent_camera_width.set_size_request(70, -1)
+    hbox.pack_start(self.ent_camera_width, False)
+
+    label3 = gtk.Label("Height:")
+    hbox.pack_start(label3, False)
+    self.ent_camera_height = gtk.Entry()
+    self.ent_camera_height.set_size_request(70, -1)
+    hbox.pack_start(self.ent_camera_height, False)
+
+    label4 = gtk.Label("FPS:")
+    hbox.pack_start(label4, False)
+    self.ent_camera_fps= gtk.Entry()
+    self.ent_camera_fps.set_size_request(70, -1)
+    hbox.pack_start(self.ent_camera_fps, False)
+
+    self.btn_camera_tgl = gtk.ToggleButton("Camera Off")
+    self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
+    hbox.pack_start(self.btn_camera_tgl, True)
+
+    self.movie_window = gtk.DrawingArea()
+    vbox.pack_start(self.movie_window, True)
+
+    return vbox
+
+
+  def build_telop_box(self):
+    vbox = gtk.VBox()
+    vbox.set_spacing(8)
+
+    hbox = gtk.HBox()
+    hbox.set_spacing(8)
+    vbox.pack_start(hbox, True)
+
+    self.cmb_text_idx = gtk.combo_box_new_text()
+    hbox.pack_start(self.cmb_text_idx, True)
+    for i in xrange(_N_TEXTAREA):
+      self.cmb_text_idx.append_text(str(i))
+
+    self.cmb_text_valign = gtk.combo_box_new_text()
+    hbox.pack_start(self.cmb_text_valign, True)
+    self.cmb_text_valign.append_text("top")
+    self.cmb_text_valign.append_text("center")
+    self.cmb_text_valign.append_text("bottom")
+
+    self.cmb_text_halign = gtk.combo_box_new_text()
+    hbox.pack_start(self.cmb_text_halign, True)
+    self.cmb_text_halign.append_text("left")
+    self.cmb_text_halign.append_text("center")
+    self.cmb_text_halign.append_text("right")
+
+    self.cmb_text_lalign = gtk.combo_box_new_text()
+    hbox.pack_start(self.cmb_text_lalign, True)
+    self.cmb_text_lalign.append_text("left")
+    self.cmb_text_lalign.append_text("center")
+    self.cmb_text_lalign.append_text("right")
+
+    self.btn_update = gtk.Button("Update")
+    self.btn_update.set_property("width-request", 200)
+    self.btn_update.connect("clicked", self.on_update)
+    hbox.pack_start(self.btn_update, False)
 
     scroll_text_view = gtk.ScrolledWindow()
     scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-
     self.ent_text = gtk.TextView()
-    self.ent_text.get_buffer().set_text(setting.TITLE)
-
     scroll_text_view.add(self.ent_text)
-    vbox_left.pack_start(scroll_text_view, True)
 
-    vbox_right = gtk.VBox()
-    hbox.pack_end(vbox_right, False)
+    vbox.pack_start(scroll_text_view, True)
 
-    self.btn_update = gtk.Button("Update")
-    self.btn_update.connect("clicked", self.on_update)
-    vbox_right.pack_start(self.btn_update, False)
-
-    return hbox
+    return vbox
 
 
   def build_streaming_box(self):
@@ -255,7 +315,10 @@ class CameraMuxerWindow(gtk.Window):
     vbox_left.set_spacing(8)
     hbox.pack_start(vbox_left)
 
-    vbox_left.pack_start(gtk.Label("Streaming Command-line"), False)
+    label1 = gtk.Label("Streaming Command-line")
+    label1.set_justify(gtk.JUSTIFY_LEFT)
+    label1.set_alignment(0,0)
+    vbox_left.pack_start(label1, False, False)
 
     scroll_text_view = gtk.ScrolledWindow()
     scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
@@ -279,12 +342,12 @@ class CameraMuxerWindow(gtk.Window):
 
 
   def build_menu(self):
-    menu_quit = gtk.MenuItem(u'終了')
+    menu_quit = gtk.MenuItem(u'Quit')
 
     filemenu = gtk.Menu()
     filemenu.append(menu_quit)
 
-    filemenutop = gtk.MenuItem(u'ファイル')
+    filemenutop = gtk.MenuItem(u'File')
     filemenutop.set_submenu(filemenu)
 
     menubar = gtk.MenuBar()
@@ -293,39 +356,55 @@ class CameraMuxerWindow(gtk.Window):
     return menubar
 
 
-  def create_timer(self):
-    self.destroy_timer()
-    self.timer = gobject.timeout_add(500, self.on_interval_timer)
+  # def create_timer(self):
+  #   self.destroy_timer()
+  #   self.timer = gobject.timeout_add(500, self.on_interval_timer)
 
 
-  def destroy_timer(self):
-    if self.timer:
-      gobject.source_remove(self.timer)
-
-  #---
-  def on_interval_timer(self):
-    # text = self.readFromFile("~/counter.txt")
-    # self.textarea_bottomleft.set_property("text", text)
-    return True 
+  # def destroy_timer(self):
+  #   if self.timer:
+  #     gobject.source_remove(self.timer)
 
 
+  # def on_interval_timer(self):
+  #   # text = self.readFromFile("~/counter.txt")
+  #   # self.textarea_bottomleft.set_property("text", text)
+  #   return True 
+
+  ############
+  #  Events  #
+  ############
   def on_update(self, widget, *args):
-    if self.player is None:
+    no = self.cmb_text_idx.get_active()
+    if no < 0:
       return 
-    self.textarea_topright.set_property("text", self.getTitleText(self.ent_text))
+    properties = {}
+    properties['text'] = self.getTextViewValue(self.ent_text)
+    properties['halignment'] = self.cmb_text_halign.get_active_text()
+    properties['valignment'] = self.cmb_text_valign.get_active_text()
+    properties['line-alignment'] = self.cmb_text_lalign.get_active_text()
+    print(properties)
+
+    try:
+      setting.TEXTAREA_PROPERTIES[no] = properties
+    except IndexError:
+      return
+
+    if self.player:
+      self.player.set_textarea_property(no, properties)
 
 
   def on_camera_startstop(self, widget, *args):
-    if self.player is None:
-      return
-
     if widget.get_active(): 
-      self.create_timer()
+      # self.create_timer()
+      self.player = WebcamComposer(self.movie_window)
+      self.player.set_state(gst.STATE_PAUSED)
       self.player.set_state(gst.STATE_PLAYING)
       self.btn_camera_tgl.set_label("Camera On")
     else:
-      self.destroy_timer()
+      # self.destroy_timer()
       self.player.set_state(gst.STATE_NULL)
+      self.player = None
       self.btn_camera_tgl.set_label("Camera Off")
 
 
@@ -335,24 +414,35 @@ class CameraMuxerWindow(gtk.Window):
 
 
   def on_destroy(self, widget, *args):
-    self.storeItemValues()
     print("OnQuit is called.")
-    self.destroy_timer()
+    self.storeItemValues()
+    # self.destroy_timer()
     if self.player:
       self.player.set_state(gst.STATE_NULL)
     gtk.main_quit()
 
+
+  ##########
+  #  Misc  #
+  ##########
   def getTextViewValue(self, textview):
     buf = textview.get_buffer()
     start, end = buf.get_bounds()
     text = buf.get_text(start, end)
     return text
+
+    
+  def loadCameraSettings(self):
+    self.ent_camera_src.set_text(setting.SRC_DEVICE)
+    self.ent_camera_width.set_text(setting.SRC_WIDTH)
+    self.ent_camera_height.set_text(setting.SRC_HEIGHT)
+    self.ent_camera_fps.set_text(setting.SRC_FRAMERATE)
     
   def storeItemValues(self):
     setting.TITLE = self.getTextViewValue(self.ent_text)
     ## TODO
 
-  # ===
+
   def readFromFile(self, filename):
     filename = os.path.normpath(os.path.expanduser(filename))
     if os.path.exists(filename):
