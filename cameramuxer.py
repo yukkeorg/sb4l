@@ -5,7 +5,11 @@ import os
 import sys
 import codecs
 import subprocess
-import pickle
+import signal
+try:
+  import cPickle as pickle
+except ImportError:
+  import pickle
 
 import pygtk
 pygtk.require('2.0')
@@ -18,9 +22,22 @@ pygst.require('0.10')
 import gst
 
 _SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
+_SETTING_LATEST_VERSION = '0.1'
 _N_TEXTAREA = 4
 
-class Setting(object):
+_CCS_HALIGN = {
+  'left'   : 0,
+  'center' : 1,
+  'right'  : 2,
+}
+
+_CCS_VALIGN = {
+  'top'    : 0,
+  'center' : 1,
+  'bottom' : 2,
+}
+
+class CameraComposerSetting(object):
   def __init__(self):
     self.SRC_DEVICE = '/dev/video0'
     self.SRC_FORMAT = 'video/x-raw-yuv'
@@ -28,7 +45,23 @@ class Setting(object):
     self.SRC_HEIGHT = '480'
     self.SRC_FRAMERATE = '30/1'
     self.DST_DEVICE = '/dev/video1'
-    self.TEXTAREA_PROPERTIES = [ {} for i in xrange(_N_TEXTAREA) ]
+
+    self.TELOP_PROPERTIES = [ {
+      'valignment' : 'top',
+      'halignment' : 'left',
+      'line-alignment' : 'left',
+      'xpad' : '0',
+      'ypad' : '0',
+      'text' : '',
+      '_is_cmd' : False
+    } for i in xrange(_N_TEXTAREA) ]
+
+
+class GlobalSetting(object):
+  def __init__(self):
+    self.version = _SETTING_LATEST_VERSION
+    self.cc = CameraComposerSetting()
+
 
 def saveSetting(fn, s):
   with open(fn, "wb") as f:
@@ -38,34 +71,35 @@ def saveSetting(fn, s):
 def loadSetting(fn):
   try:
     with open(fn, "rb") as f:
-      return pickle.load(f)
+      o = pickle.load(f)
+      if o.version == _SETTING_LATEST_VERSION:
+        return o
+      else:
+        print("different version had in RC file.") 
   except:
-    return None
+    pass
+  return None
       
-# setting = loadSetting(_SETTING_FILENAME) or Setting()
-setting = Setting()
+setting = loadSetting(_SETTING_FILENAME) or GlobalSetting()
 
 
 class WebcamComposer(object):
-  def __init__(self, prev_panel=None):
+  def __init__(self, settings=None, prev_panel=None):
+    self.settings = settings
     self.prev_panel = prev_panel
-    self.build_player()
+    self.build_composer()
 
 
-  def build_player(self):
-    self.cameracaps = gst.caps_from_string('{0},width={1},height={2},framerate={3}' \
-                        .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
-                                setting.SRC_HEIGHT, setting.SRC_FRAMERATE))
-
-    self.player = gst.Pipeline('CameraMuxer')
+  def build_composer(self):
+    #################
+    # Make Elements #
+    #################
+    self.player = gst.Pipeline('CameraComposer')
 
     self.camerasource = gst.element_factory_make('v4l2src')
     capsfilter = gst.element_factory_make('capsfilter')
-    capsfilter.set_property('caps', self.cameracaps)
     videorate = gst.element_factory_make('videorate')
-    self.textareas = []
-    for i in xrange(_N_TEXTAREA):
-      self.textareas.append(gst.element_factory_make('textoverlay'))
+    self.textareas = [ gst.element_factory_make('textoverlay') for i in xrange(_N_TEXTAREA) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink', 'v4l2')
     self.avsink = gst.element_factory_make('xvimagesink')
 
@@ -81,9 +115,15 @@ class WebcamComposer(object):
     gst.element_link_many(tee, queue1, self.v4l2sink)
     gst.element_link_many(tee, queue2, self.avsink)
 
-
-    self.camerasource.set_property('device', '/dev/video0')
-    self.v4l2sink.set_property('device', '/dev/video1')
+    ########################
+    # Configuring Elements #
+    ########################
+    self.camerasource.set_property('device', setting.cc.SRC_DEVICE)
+    capsfilter.set_property('caps', 
+        gst.caps_from_string('{0},width={1},height={2},framerate={3}' \
+                      .format(setting.cc.SRC_FORMAT, setting.cc.SRC_WIDTH, 
+                              setting.cc.SRC_HEIGHT, setting.cc.SRC_FRAMERATE)))
+    self.v4l2sink.set_property('device', setting.cc.DST_DEVICE)
 
     for textarea in self.textareas:
       textarea.set_property("halignment", "left")  # left, right, center
@@ -91,7 +131,6 @@ class WebcamComposer(object):
       textarea.set_property("line-alignment", "left")  # left, right
       textarea.set_property("xpad", 10)
       textarea.set_property("ypad", 10)
-
 
     bus = self.player.get_bus()
     bus.add_signal_watch()
@@ -104,6 +143,16 @@ class WebcamComposer(object):
     self.player.set_state(state)
 
 
+  def set_textarea_text(self, text, *args, **kw):
+    if "no" not in kw:
+      return
+    try:
+      textarea = self.textareas[kw['no']]
+    except IndexError:
+      return 
+    textarea.set_property("text", text)
+
+
   def set_textarea_property(self, no, propdict):
     try:
       textarea = self.textareas[no]
@@ -111,12 +160,8 @@ class WebcamComposer(object):
       return 
 
     for name, value in propdict.iteritems():
-      textarea.set_property(name, value)
-
-
-  def set_textarea_properties(self, propdictlist):
-    for no, propdict in propdictlist:
-      self.set_textarea_property(no, propdict)
+      if name in ("halignment", "valignment", "line-alignment", "xpad", "ypad", "text"):
+        textarea.set_property(name, value)
 
 
   def get_textarea_property(self, no):
@@ -130,10 +175,6 @@ class WebcamComposer(object):
       value = ta.get_property(prop)
       properties[prop] = value
     return (no, properties)
-
-
-  def get_textarea_properties(self):
-    return [ self.get_textarea_properties(i) for i in xrange(len(self.textareas)) ]
 
 
   #########
@@ -161,40 +202,59 @@ class WebcamComposer(object):
 
 
 class StdoutReader(object):
-  def __init__(self, cmd_and_args):
+  def __init__(self, cmd_and_args, callback=None, *args, **kw):
+    self.cmd_and_args = cmd_and_args
+    self.callback = callback
+    self.callback_args = args
+    self.callback_kw = kw
+    self._spawn()
+
+
+  def _spawn(self):
+    self.child = None
     try:
-      self.subp = subprocess.Popen(cmd_and_args, stdout=subprocess.PIPE, close_fds=True)
-    except OSError:
-      return
-    glib.io_add_watch(self.subp.stdout, glib.IO_IN | glib.IO_HUP, self._event)
+      self.child = subprocess.Popen(self.cmd_and_args, stdout=subprocess.PIPE, close_fds=False)
+      glib.io_add_watch(self.child.stdout, glib.IO_IN | glib.IO_HUP, self._event)
+    except (OSError, glib.GError), e:
+      print(e.message)
 
 
   def _event(self, fd, condition):
-    if self.subp:
-      if condition & glib.IO_IN:
-        data = fd.read()
-        if self.subp.poll():
-          self.subp = None
-          return False
-        return True
-    else:
+    if condition & glib.IO_IN:
+      text = []
+      while True:
+        data = fd.readline()
+        if data == "":
+          break
+        text.append(data)
+      if self.callback:
+        self.callback(text, *self.callback_args, **self.callback_kw)
+
+    if condition & glib.IO_HUP:
+      self.child.poll()
       return False
+    return True
 
 
   def terminate(self):
-    if self.subp:
-      self.subp.terminate()
-      self.subp = None
-    
+    if self.child:
+      self.child.terminate()
+
+
+  def is_running(self):
+    if self.child:
+      return self.child.returncode is None
+    else:
+      return False
 
 
 class CameraMuxerWindow(gtk.Window):
   def __init__(self):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
-    # self.timer = None
     self.player = None
+    self.spawnlist = []
     self.buildWindow()
-    self.loadCameraSettings()
+    self.loadSettings()
 
 
   def buildWindow(self):
@@ -213,14 +273,14 @@ class CameraMuxerWindow(gtk.Window):
     vbox_main.set_spacing(8)
     vbox_root.pack_start(vbox_main, True)
 
-    vbox_main.pack_start(self.build_preview_box(), True)
+    vbox_main.pack_start(self.build_camera_box(), True)
     vbox_main.pack_start(self.build_telop_box(), False)
     vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
 
 
-  def build_preview_box(self):
+  def build_camera_box(self):
     vbox = gtk.VBox()
 
     hbox = gtk.HBox()
@@ -269,39 +329,60 @@ class CameraMuxerWindow(gtk.Window):
     hbox.set_spacing(8)
     vbox.pack_start(hbox, True)
 
+    hbox.pack_start(gtk.Label("TNO."), False)
     self.cmb_text_idx = gtk.combo_box_new_text()
+    self.cmb_text_idx.connect('changed', self.on_cmb_text_idx_changed)
     hbox.pack_start(self.cmb_text_idx, True)
     for i in xrange(_N_TEXTAREA):
       self.cmb_text_idx.append_text(str(i))
 
+    hbox.pack_start(gtk.Label("H:"), False)
     self.cmb_text_valign = gtk.combo_box_new_text()
     hbox.pack_start(self.cmb_text_valign, True)
     self.cmb_text_valign.append_text("top")
     self.cmb_text_valign.append_text("center")
     self.cmb_text_valign.append_text("bottom")
 
+    hbox.pack_start(gtk.Label("V:"), False)
     self.cmb_text_halign = gtk.combo_box_new_text()
     hbox.pack_start(self.cmb_text_halign, True)
     self.cmb_text_halign.append_text("left")
     self.cmb_text_halign.append_text("center")
     self.cmb_text_halign.append_text("right")
 
+    hbox.pack_start(gtk.Label("L:"), False)
     self.cmb_text_lalign = gtk.combo_box_new_text()
     hbox.pack_start(self.cmb_text_lalign, True)
     self.cmb_text_lalign.append_text("left")
     self.cmb_text_lalign.append_text("center")
     self.cmb_text_lalign.append_text("right")
 
+    hbox.pack_start(gtk.Label("xpad:"), False)
+    self.ent_text_xpad = gtk.Entry()
+    self.ent_text_xpad.set_size_request(50, -1)
+    hbox.pack_start(self.ent_text_xpad, True)
+
+    hbox.pack_start(gtk.Label("ypad:"), False)
+    self.ent_text_ypad = gtk.Entry()
+    self.ent_text_ypad.set_size_request(50, -1)
+    hbox.pack_start(self.ent_text_ypad, True)
+
+    hbox2 = gtk.HBox()
+    vbox.pack_start(hbox2, True)
+
+    self.chk_text_is_cmdline = gtk.CheckButton("Command")
+    self.chk_text_is_cmdline.set_alignment(0, 0)
+    hbox2.pack_start(self.chk_text_is_cmdline, True)
+
     self.btn_update = gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
     self.btn_update.connect("clicked", self.on_update)
-    hbox.pack_start(self.btn_update, False)
+    hbox2.pack_end(self.btn_update, False)
 
     scroll_text_view = gtk.ScrolledWindow()
     scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
     self.ent_text = gtk.TextView()
     scroll_text_view.add(self.ent_text)
-
     vbox.pack_start(scroll_text_view, True)
 
     return vbox
@@ -356,53 +437,63 @@ class CameraMuxerWindow(gtk.Window):
     return menubar
 
 
-  # def create_timer(self):
-  #   self.destroy_timer()
-  #   self.timer = gobject.timeout_add(500, self.on_interval_timer)
-
-
-  # def destroy_timer(self):
-  #   if self.timer:
-  #     gobject.source_remove(self.timer)
-
-
-  # def on_interval_timer(self):
-  #   # text = self.readFromFile("~/counter.txt")
-  #   # self.textarea_bottomleft.set_property("text", text)
-  #   return True 
-
   ############
   #  Events  #
   ############
+  def on_cmb_text_idx_changed(self, widget):
+    idx = widget.get_active()
+    try:
+      properties = setting.cc.TELOP_PROPERTIES[idx]
+    except IndexError:
+      return
+    if 'halignment' in properties:
+      self.cmb_text_halign.set_active(_CCS_HALIGN.get(properties['halignment'], 0))
+    if 'valignment' in properties:
+      self.cmb_text_valign.set_active(_CCS_VALIGN.get(properties['valignment'], 0))
+    if 'line-alignment' in properties:
+      self.cmb_text_lalign.set_active(_CCS_HALIGN.get(properties['line-alignment'], 0))
+    if 'xpad' in properties:
+      self.ent_text_xpad.set_text(properties['xpad'])
+    if 'ypad' in properties:
+      self.ent_text_ypad.set_text(properties['ypad'])
+    if 'text' in properties:
+      self.ent_text.get_buffer().set_text(properties['text'])
+    if '_is_cmd' in properties:
+      self.chk_text_is_cmdline.set_active(properties['_is_cmd'])
+
+
+
   def on_update(self, widget, *args):
     no = self.cmb_text_idx.get_active()
     if no < 0:
       return 
     properties = {}
-    properties['text'] = self.getTextViewValue(self.ent_text)
     properties['halignment'] = self.cmb_text_halign.get_active_text()
     properties['valignment'] = self.cmb_text_valign.get_active_text()
     properties['line-alignment'] = self.cmb_text_lalign.get_active_text()
-    print(properties)
+    properties['_is_cmd'] = self.chk_text_is_cmdline.get_active()
+    properties['text'] = self.getTextViewValue(self.ent_text)
 
     try:
-      setting.TEXTAREA_PROPERTIES[no] = properties
+      setting.cc.TELOP_PROPERTIES[no] = properties
     except IndexError:
       return
 
     if self.player:
       self.player.set_textarea_property(no, properties)
+      if properties['_is_cmd']:
+        sr = StdoutReader(properties['text'], self.player.set_textarea_text, no=no)
+        if sr.child:
+          self.spawnlist(sr)
 
 
-  def on_camera_startstop(self, widget, *args):
+  def on_camera_startstop(self, widget):
     if widget.get_active(): 
-      # self.create_timer()
-      self.player = WebcamComposer(self.movie_window)
+      self.player = WebcamComposer(prev_panel=self.movie_window)
       self.player.set_state(gst.STATE_PAUSED)
       self.player.set_state(gst.STATE_PLAYING)
       self.btn_camera_tgl.set_label("Camera On")
     else:
-      # self.destroy_timer()
       self.player.set_state(gst.STATE_NULL)
       self.player = None
       self.btn_camera_tgl.set_label("Camera Off")
@@ -415,8 +506,6 @@ class CameraMuxerWindow(gtk.Window):
 
   def on_destroy(self, widget, *args):
     print("OnQuit is called.")
-    self.storeItemValues()
-    # self.destroy_timer()
     if self.player:
       self.player.set_state(gst.STATE_NULL)
     gtk.main_quit()
@@ -432,15 +521,19 @@ class CameraMuxerWindow(gtk.Window):
     return text
 
     
-  def loadCameraSettings(self):
-    self.ent_camera_src.set_text(setting.SRC_DEVICE)
-    self.ent_camera_width.set_text(setting.SRC_WIDTH)
-    self.ent_camera_height.set_text(setting.SRC_HEIGHT)
-    self.ent_camera_fps.set_text(setting.SRC_FRAMERATE)
+  def loadSettings(self):
+    self.ent_camera_src.set_text(setting.cc.SRC_DEVICE)
+    self.ent_camera_width.set_text(setting.cc.SRC_WIDTH)
+    self.ent_camera_height.set_text(setting.cc.SRC_HEIGHT)
+    self.ent_camera_fps.set_text(setting.cc.SRC_FRAMERATE)
+
+    self.cmb_text_idx.set_active(0)
+
     
   def storeItemValues(self):
-    setting.TITLE = self.getTextViewValue(self.ent_text)
+    #setting.TITLE = self.getTextViewValue(self.ent_text)
     ## TODO
+    pass
 
 
   def readFromFile(self, filename):
