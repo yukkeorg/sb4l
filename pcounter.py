@@ -73,15 +73,13 @@ class Counter(object):
       combo = '\n<span size="x-large">{0:3}</span> LockOn!'.format(counts[CNT_EXT_COMBO])
 
       
-    countstr = u"""<span font-desc="Ricty Bold 15">GameCount:\n<span size="x-large">{0:3}</span>/{1}\nBonusCount:\n<span size="x-large">{2:3}</span>/{3} ({4}){5}</span>""" \
+    countstr = u"""<span font-desc="Ricty Bold 15">GameCount:\n<span size="x-large">{0:3}</span>/{1}\nBonusCount:\n<span size="x-large">{2:3}</span>/{3} ({4}){5}</span>\x00""" \
            .format(counts[BIT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
                    counts[BIT_BONUS], counts[BIT_CHANCE], 
                    bonus_rate, combo)
 
-    with codecs.open(self._outputfile, "w", "utf-8") as f:
-      f.write(countstr)
-      f.close()
-
+    sys.stdout.write(countstr)
+    sys.stdout.flush()
 
   def countup(self):
     port0, port1 = self.usbio.send2read()
