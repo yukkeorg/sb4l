@@ -29,7 +29,6 @@ ASAMPLINGRATE="44100"
 ABITRATE="96"
 ACHANNEL="2"
 
-
 if [ "${STREAM}x" != "x" ]; then
   # to NicoNama Broadcast
   OUTPUT_URI="${RTMP_URI}/${STREAM} flashver=FMLE/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
