@@ -26,6 +26,7 @@
 # THE POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
+
 import os
 import sys
 import codecs
@@ -157,8 +158,8 @@ class WebcamComposer(object):
     self.player.add(self.camerasource, videorate, capsfilter,
                     self.v4l2sink, self.avsink, tee, queue1, queue2, queue3,
                     *self.telops)
-    elements = [self.camerasource, queue1, videorate, capsfilter] + self.telops + [tee]
-    gst.element_link_many(*elements)
+    firstelements = [self.camerasource, videorate, capsfilter, queue1] + self.telops + [tee]
+    gst.element_link_many(*firstelements)
     gst.element_link_many(tee, queue2, self.v4l2sink)
     gst.element_link_many(tee, queue3, self.avsink)
 
