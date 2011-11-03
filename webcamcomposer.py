@@ -158,7 +158,7 @@ class WebcamComposer(object):
     self.player.add(self.camerasource, videorate, capsfilter,
                     self.v4l2sink, self.avsink, tee, queue1, queue2, queue3,
                     *self.telops)
-    firstelements = [self.camerasource, videorate, capsfilter, queue1] + self.telops + [tee]
+    firstelements = [self.camerasource, queue1, videorate, capsfilter] + self.telops + [ tee ]
     gst.element_link_many(*firstelements)
     gst.element_link_many(tee, queue2, self.v4l2sink)
     gst.element_link_many(tee, queue3, self.avsink)
@@ -167,10 +167,10 @@ class WebcamComposer(object):
     # Configuring Elements #
     ########################
     self.camerasource.set_property('device', setting.SRC_DEVICE)
-    capsfilter.set_property('caps', 
-        gst.caps_from_string('{0},width={1},height={2},framerate={3}' \
-                      .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
-                              setting.SRC_HEIGHT, setting.SRC_FRAMERATE)))
+    srccaps = '{0},width={1},height={2},framerate={3}' \
+               .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
+                       setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
+    capsfilter.set_property('caps', gst.caps_from_string(srccaps))
     self.v4l2sink.set_property('device', setting.DST_DEVICE)
 
     for i in xrange(_N_TELOP):
@@ -222,19 +222,6 @@ class WebcamComposer(object):
         telop.set_property(name, value)
 
 
-#   def get_telop_property(self, no):
-#     try:
-#       telop = self.telops[no]
-#     except IndexError:
-#       return None
-# 
-#     properties = {}
-#     for prop in self.ALLOW_TELOP_PROP_NAME:
-#       value = ta.get_property(prop)
-#       properties[prop] = value
-#     return (no, properties)
-
-
   #########
   # Event #
   #########
@@ -275,7 +262,7 @@ class StdoutReader(object):
 
   def _spawn(self):
     try:
-      self.child = subprocess.Popen(self.cmd_and_args, stdout=subprocess.PIPE, close_fds=False)
+      self.child = subprocess.Popen(self.cmd_and_args, stdout=subprocess.PIPE, close_fds=True)
       glib.io_add_watch(self.child.stdout, glib.IO_IN | glib.IO_HUP, self._event)
     except (OSError, glib.GError), e:
       print(e.message)
@@ -341,7 +328,7 @@ class WebcamComposerWindow(gtk.Window):
 
     vbox_main.pack_start(self.build_camera_box(), True)
     vbox_main.pack_start(self.build_telop_box(), False)
-    vbox_main.pack_start(self.build_streaming_box(), False)
+    # vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
 
@@ -422,7 +409,7 @@ class WebcamComposerWindow(gtk.Window):
     self.cmb_text_halign.append_text("center")
     self.cmb_text_halign.append_text("right")
 
-    hbox.pack_start(gtk.Label("L:"), False)
+    hbox.pack_start(gtk.Label("Line:"), False)
     self.cmb_text_lalign = gtk.combo_box_new_text()
     hbox.pack_start(self.cmb_text_lalign, True)
     self.cmb_text_lalign.append_text("left")
@@ -513,9 +500,7 @@ class WebcamComposerWindow(gtk.Window):
   #  Callbacks  #
   ###############
 
-  #
-  #  Internal callbacks
-  #
+  # -- Internal 
 
   def on_cmb_text_idx_changed(self, widget):
     idx = widget.get_active()
@@ -598,9 +583,7 @@ class WebcamComposerWindow(gtk.Window):
     gtk.main_quit()
 
 
-  #
-  #  External callbacks
-  #
+  # -- External 
 
   def on_cc_error(self, message): 
     """ WebcamComposer Error Callback """
