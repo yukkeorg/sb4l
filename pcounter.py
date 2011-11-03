@@ -32,6 +32,7 @@ import sys
 import time
 import pickle
 import logging
+import signal
 
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, BASEDIR)
@@ -163,6 +164,13 @@ class PCounter(object):
       self.save()
     return 0
 
+  
+  def signal_handler(self, signum, stackframe):
+    if signum == signal.SIGTERM:
+      c.save()
+      sys.exit(2)
+    
+  
 
 if __name__ == '__main__':
   resetcount = False
@@ -170,5 +178,6 @@ if __name__ == '__main__':
     if sys.argv[1] == "-i":
       resetcount = True
   c = PCounter()
+  signal.signal(signal.SIGTERM, c.signal_handler)
   sys.exit(c.mainloop(resetcount))
 
