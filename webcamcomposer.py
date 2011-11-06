@@ -251,6 +251,10 @@ class WebcamComposer(object):
 
 
 class StdoutReader(object):
+  SR_START = 1
+  SR_BUFFERED = 2
+  SR_END = 3 
+
   def __init__(self, cmd_and_args, callback, telop_no):
     self.cmd_and_args = cmd_and_args
     self.callback = callback
@@ -264,6 +268,8 @@ class StdoutReader(object):
     try:
       self.child = subprocess.Popen(self.cmd_and_args, stdout=subprocess.PIPE, close_fds=True)
       glib.io_add_watch(self.child.stdout, glib.IO_IN | glib.IO_HUP, self._event)
+      if self.callback:
+        self.callback(self.SR_START, self, None)
     except (OSError, glib.GError), e:
       print(e.message)
 
@@ -278,10 +284,12 @@ class StdoutReader(object):
         text.append(data)
       text = ''.join(text)
       if self.callback:
-        self.callback(self.telop_no, text)
+        self.callback(self.SR_BUFFERED, self, text)
 
     if condition & glib.IO_HUP:
       self.child.poll()
+      if self.callback:
+        self.callback(self.SR_END, self, None)
       return False
     return True
 
@@ -304,7 +312,7 @@ class WebcamComposerWindow(gtk.Window):
   def __init__(self):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
     self.player = None
-    self.spawnlist = []
+    self.spawnlist = [None] * _N_TELOP
 
     self.buildWindow()
     self.loadSettings()
@@ -431,7 +439,12 @@ class WebcamComposerWindow(gtk.Window):
 
     self.chk_text_is_cmdline = gtk.CheckButton("Command")
     self.chk_text_is_cmdline.set_alignment(0, 0)
-    hbox2.pack_start(self.chk_text_is_cmdline, True)
+    hbox2.pack_start(self.chk_text_is_cmdline, False)
+
+    self.btn_kill = gtk.Button("Kill")
+    self.btn_kill.connect("clicked", self.on_kill)
+    self.btn_kill.hide()
+    hbox2.pack_start(self.btn_kill, False)
 
     self.btn_update = gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
@@ -543,9 +556,7 @@ class WebcamComposerWindow(gtk.Window):
       self.player.set_telop_property(no, properties)
       if properties['_is_cmd']:
         cmdline = shlex.split(properties['text'])
-        sr = StdoutReader(cmdline, self.on_read_from_stdout, no)
-        if sr.child:
-          self.spawnlist.append(sr)
+        self.spawnlist[no] = StdoutReader(cmdline, self.on_read_from_stdout, no)
 
 
   def on_camera_startstop(self, widget):
@@ -570,7 +581,13 @@ class WebcamComposerWindow(gtk.Window):
       self.player = None
       self.btn_camera_tgl.set_label("Camera Off")
 
+  def on_kill(self, widget):
+    no = self.cmb_text_idx.get_active()
+    sr = self.spawnlist[no]
+    if sr and sr.is_running():
+      sr.terminate()
 
+    
   def on_delete(self, widget, *args):
     print("OnDelete is called.")
     return False 
@@ -591,10 +608,15 @@ class WebcamComposerWindow(gtk.Window):
     pass
 
 
-  def on_read_from_stdout(self, tNo, text):
+  def on_read_from_stdout(self, msgtype, sr, text):
     """ StdoutReader read data from stdout callback """
-    if self.player:
-      self.player.set_telop_text(tNo, text)
+    if msgtype == StdoutReader.SR_BUFFERED:
+      if self.player:
+        self.player.set_telop_text(sr.telop_no, text)
+    elif msgtype == StdoutReader.SR_START:
+      self.btn_kill.show()
+    elif msgtype == StdoutReader.SR_END:
+      self.btn_kill.hide()
 
 
   ##########
