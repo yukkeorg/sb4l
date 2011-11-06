@@ -314,11 +314,11 @@ class WebcamComposerWindow(gtk.Window):
     self.player = None
     self.spawnlist = [None] * _N_TELOP
 
-    self.buildWindow()
-    self.loadSettings()
+    self.build_window()
+    self.set_values()
 
 
-  def buildWindow(self):
+  def build_window(self):
     self.set_title("Webcam Comporser")
     self.set_default_size(800, 600)
     self.connect("delete-event", self.on_delete)
@@ -509,6 +509,16 @@ class WebcamComposerWindow(gtk.Window):
     return menubar
 
 
+  def set_values(self):
+    self.ent_camera_src.set_text(setting.SRC_DEVICE)
+    self.ent_camera_fmt.set_text(setting.SRC_FORMAT)
+    self.ent_camera_width.set_text(setting.SRC_WIDTH)
+    self.ent_camera_height.set_text(setting.SRC_HEIGHT)
+    self.ent_camera_fps.set_text(setting.SRC_FRAMERATE)
+    self.ent_camera_dst.set_text(setting.DST_DEVICE)
+
+    self.cmb_text_idx.set_active(0)
+
   ###############
   #  Callbacks  #
   ###############
@@ -581,6 +591,7 @@ class WebcamComposerWindow(gtk.Window):
       self.player = None
       self.btn_camera_tgl.set_label("Camera Off")
 
+
   def on_kill(self, widget):
     no = self.cmb_text_idx.get_active()
     sr = self.spawnlist[no]
@@ -605,7 +616,6 @@ class WebcamComposerWindow(gtk.Window):
   def on_cc_error(self, message): 
     """ WebcamComposer Error Callback """
     print("{0}:{1}".format(*message), file=sys.stderr)
-    pass
 
 
   def on_read_from_stdout(self, msgtype, sr, text):
@@ -629,15 +639,6 @@ class WebcamComposerWindow(gtk.Window):
     return text
 
     
-  def loadSettings(self):
-    self.ent_camera_src.set_text(setting.SRC_DEVICE)
-    self.ent_camera_fmt.set_text(setting.SRC_FORMAT)
-    self.ent_camera_width.set_text(setting.SRC_WIDTH)
-    self.ent_camera_height.set_text(setting.SRC_HEIGHT)
-    self.ent_camera_fps.set_text(setting.SRC_FRAMERATE)
-    self.ent_camera_dst.set_text(setting.DST_DEVICE)
-
-    self.cmb_text_idx.set_active(0)
 
 
 
