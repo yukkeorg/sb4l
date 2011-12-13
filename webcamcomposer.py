@@ -135,7 +135,6 @@ class WebcamComposer(object):
   def __init__(self, prev_panel=None, on_err_callback=None):
     self.prev_panel = prev_panel
     self.on_err_callback = on_err_callback
-
     self.build_composer()
 
   def build_composer(self):
@@ -143,7 +142,6 @@ class WebcamComposer(object):
     # Make Elements #
     #################
     self.player = gst.Pipeline('WebcamComposer')
-
     self.camerasource = gst.element_factory_make('v4l2src')
     capsfilter = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
@@ -189,7 +187,6 @@ class WebcamComposer(object):
         telop.set_property("text", "")
       else:
         telop.set_property("text", tp.get("text", ""))
-
     ########################
     # Connecting Callbacks #
     ########################
@@ -240,13 +237,13 @@ class WebcamComposer(object):
     if message.structure is None:
       return
     message_name = message.structure.get_name()
-    if self.prev_panel and message_name == "prepare-xwindow-id":
+    if message_name == "prepare-xwindow-id":
       imagesink = message.src
       imagesink.set_property("force-aspect-ratio", True)
-      gtk.gdk.threads_enter()
-      imagesink.set_xwindow_id(self.prev_panel.window.xid)
-      gtk.gdk.threads_leave()
-
+      if self.prev_panel: 
+        gtk.gdk.threads_enter()
+        imagesink.set_xwindow_id(self.prev_panel.window.xid)
+        gtk.gdk.threads_leave()
 
 
 
@@ -260,7 +257,6 @@ class StdoutReader(object):
     self.callback = callback
     self.telop_no = telop_no
     self.child = None
-
     self._spawn()
 
 
@@ -443,7 +439,7 @@ class WebcamComposerWindow(gtk.Window):
 
     self.btn_kill = gtk.Button("Kill")
     self.btn_kill.connect("clicked", self.on_kill)
-    self.btn_kill.hide()
+    self.btn_kill.set_sensitive(False)
     hbox2.pack_start(self.btn_kill, False)
 
     self.btn_update = gtk.Button("Update")
@@ -541,7 +537,13 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_text_xpad.set_text(str(properties.get('xpad', 0)))
     self.ent_text_ypad.set_text(str(properties.get('ypad', 0)))
     self.ent_text.get_buffer().set_text(properties.get('text', ''))
-    self.chk_text_is_cmdline.set_active(properties.get('_is_cmd', False))
+    is_cmd = properties.get('_is_cmd', False)
+    self.chk_text_is_cmdline.set_active(is_cmd)
+    self.btn_kill.set_sensitive(False)
+    if is_cmd:
+      spawn = self.spawnlist[idx]
+      if spawn and spawn.is_running():
+        self.btn_kill.set_sensitive(True)
 
 
   def on_update(self, widget, *args):
@@ -585,7 +587,7 @@ class WebcamComposerWindow(gtk.Window):
       self.btn_camera_tgl.set_label("Camera On")
     else:
       for spawn in self.spawnlist:
-        if spawn.is_running():
+        if spawn and spawn.is_running():
           spawn.terminate()
       self.player.set_state(gst.STATE_NULL)
       self.player = None
@@ -624,9 +626,9 @@ class WebcamComposerWindow(gtk.Window):
       if self.player:
         self.player.set_telop_text(sr.telop_no, text)
     elif msgtype == StdoutReader.SR_START:
-      self.btn_kill.show()
+      self.btn_kill.set_sensitive(True)
     elif msgtype == StdoutReader.SR_END:
-      self.btn_kill.hide()
+      self.btn_kill.set_sensitive(False)
 
 
   ##########
