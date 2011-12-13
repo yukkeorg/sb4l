@@ -31,6 +31,7 @@ import os
 import sys
 import time
 import pickle
+import optparse
 import logging
 import signal
 
@@ -50,7 +51,7 @@ N_COUNT_GROUP = 6
 BIT_COUNT = CNT_COUNT = 0
 BIT_BONUS = CNT_BONUS = 1
 BIT_CHANCE = CNT_CHANCE = 2
-BIT_RESERVED = CNT_RESERVED = 3
+BIT_SBONUS = CNT_SBONUS = 3
 CNT_EXT_TOTALCOUNT = 4
 CNT_EXT_COMBO = 5
 
@@ -61,11 +62,15 @@ else:
 
 
 class PCounter(object):
-  def __init__(self, rcfile=None, outputfile=None):
-    self._rcfile = rcfile if rcfile is not None else RC_FILE 
+  def __init__(self, rcfile=None, outputfile=None, output_callbacks=None):
+    self.rcfile = rcfile if rcfile else RC_FILE 
     self.usbio = None
     self.counts = [ [0]*N_COUNT_GROUP ] * N_PORT_GROUP
     self.onFlag = 0
+    if output_callbacks is None:
+      self.output_callbacks = [None] * N_PORT_GROUP
+    else:
+      self.output_callbacks = output_callbacks
 
   def init_device(self):
     self.usbio = USBIO()
@@ -76,41 +81,19 @@ class PCounter(object):
 
   def save(self):
     try:
-      with open(self._rcfile, "wb") as f:
+      with open(self.rcfile, "wb") as f:
         pickle.dump(self.counts, f, -1)
     except IOError, e:
       logger.error(u"カウンタ値が保存できませんでした。原因：{0}".format(e.message))
 
-
   def load(self):
     try:
-      with open(self._rcfile, "rb") as f:
+      with open(self.rcfile, "rb") as f:
         self.counts = pickle.load(f)
       return True
     except IOError, e:
       logger.error(u"カウンタ値を読み込めませんでした。原因：{0}".format(e.message))
       return False
-
-
-  def output(self):
-    counts = self.counts[0]
-    try:
-      bonus_rate = "1/{0:.1f}".format(float(counts[CNT_EXT_TOTALCOUNT]) / counts[CNT_BONUS])
-    except ZeroDivisionError:
-      bonus_rate = "1/-.-"
-
-    combo = ""
-    if counts[CNT_EXT_COMBO] > 0:
-      combo = '\n<span size="x-large">{0:3}</span> LockOn!'.format(counts[CNT_EXT_COMBO])
-
-    countstr = u"""<span font-desc="Ricty Bold 15">GameCount:\n<span size="x-large">{0:3}</span>({1})\nBonusCount:\n<span size="x-large">{2:3}</span>/{3} ({4}){5}</span>\x00""" \
-           .format(counts[BIT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
-                   counts[BIT_BONUS], counts[BIT_CHANCE], 
-                   bonus_rate, combo)
-
-    sys.stdout.write(countstr.encode(CHAR_ENCODE))
-    sys.stdout.flush()
-
 
   def countup(self):
     port0, port1 = self.usbio.send2read()
@@ -119,8 +102,7 @@ class PCounter(object):
     for i in xrange(N_PORT_GROUP):
       bitgroup = port & 0x0f;
       port = port >> 4
-      # カウンター、ボーナス、チャンス の状態をそれぞれチェック
-      for j in (BIT_COUNT, BIT_BONUS, BIT_CHANCE):
+      for j in (BIT_COUNT, BIT_BONUS, BIT_CHANCE, BIT_SBONUS):
         idx = i * N_BIT_GROUP + j
         tbit = 1 << idx
         if bitgroup & (1 << j):
@@ -130,11 +112,14 @@ class PCounter(object):
             self.counts[i][j] += 1
             # それがカウンターだったら 
             if j == BIT_COUNT:
+              # 総回転数もカウントアップする
               self.counts[i][CNT_EXT_TOTALCOUNT] += 1
-            # それがボーナスだったら 
+            # それがボだったら 
             elif j == BIT_BONUS:
               cbit = i * N_BIT_GROUP + BIT_CHANCE
+              # かつチャンス中なら
               if bitgroup & cbit:
+                # コンボカウンターもカウントアップする
                 self.counts[i][CNT_EXT_COMBO] += 1
         else:
           # 状態がOn→Offになるとき
@@ -142,21 +127,29 @@ class PCounter(object):
             self.onFlag = self.onFlag & (~tbit)
             # それがボーナスだったら
             if j == BIT_BONUS:
+              # 回転数カウンタをリセットする
               self.counts[i][BIT_COUNT] = 0
-            # それがボーナス+時短だったら
+            # それがチャンス中だったら
             elif j == BIT_CHANCE:
+              # コンボカウンタをリセットする
               self.counts[i][CNT_EXT_COMBO] = 0
 
-
-  def mainloop(self, resetcount=False):
+  def mainloop(self, reset=False, nonull=False):
     self.init_device()
-    if not resetcount:
+    if not reset:
       if not self.load():
         return 1
     try:
       while True:
         self.countup()
-        self.output()
+        for i in range(N_PORT_GROUP):
+          output_callback = self.output_callbacks[i]
+          if output_callback and callable(output_callback):
+            countstr = output_callback(self.counts[i])
+            sys.stdout.write(countstr.encode(CHAR_ENCODE))
+        if not nonull:
+          sys.stdout.write("\x00")
+        sys.stdout.flush()
         time.sleep(0.2)
     except KeyboardInterrupt:
       pass
@@ -164,20 +157,71 @@ class PCounter(object):
       self.save()
     return 0
 
-  
-  def signal_handler(self, signum, stackframe):
-    if signum == signal.SIGTERM:
-      c.save()
-      sys.exit(2)
-    
-  
+
+def gen_bonusrate(total, now):
+  try:
+    bonus_rate = "1/{0:.1f}".format(float(total)/now)
+  except ZeroDivisionError:
+    bonus_rate = "1/-.-"
+  return bonus_rate
+
+def gen_combo(n_combo, suffix=None):
+  if suffix is None:
+    suffix = "Chain(s)"
+  combo = ""
+  if n_combo > 0:
+    combo = '\n<span size="x-large">{0:3}</span> {1}'.format(n_combo, suffix)
+  return combo
+
+def output_for_stealth(counts):
+  bonus_rate = gen_bonusrate(counts[CNT_EXT_TOTALCOUNT], counts[CNT_BONUS])
+  combo = gen_combo(counts[CNT_EXT_COMBO], "Lock On!")
+
+  return u"""<span font-desc="Ricty Bold 15">GameCount:\n<span size="x-large">{0:3}</span>({1})\nBonusCount:\n<span size="x-large">{2:3}</span>/{3} ({4}){5}</span>""" \
+         .format(counts[CNT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
+                 counts[CNT_BONUS], counts[CNT_CHANCE], 
+                 bonus_rate, combo)
+
+
+def output_for_xfiles(counts):
+  bonus_rate = gen_bonusrate(counts[CNT_EXT_TOTALCOUNT], counts[CNT_BONUS])
+  sbonus_rate = gen_bonusrate(counts[CNT_EXT_TOTALCOUNT], counts[CNT_SBONUS])
+  combo = gen_combo(counts[CNT_EXT_COMBO])
+
+  return u"""<span font-desc="Ricty Bold 15">____\nGAME\_______\n<span size="x-large">{0:4}</span>({1})\n_____\nBONUS\________\nTOTAL:{6:5}({7})\nUZ+XR:{2:3}/{3}({4}){5}</span>""" \
+         .format(counts[CNT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
+                 counts[CNT_BONUS], counts[CNT_CHANCE], bonus_rate, 
+                 combo,
+                 counts[CNT_SBONUS], sbonus_rate)
+
 
 if __name__ == '__main__':
-  resetcount = False
-  if len(sys.argv) > 1:
-    if sys.argv[1] == "-i":
-      resetcount = True
-  c = PCounter()
-  signal.signal(signal.SIGTERM, c.signal_handler)
-  sys.exit(c.mainloop(resetcount))
+  output_funcs_table = {
+      'stealth' : output_for_stealth,
+      'xfiles'  : output_for_xfiles,
+  }
+  output_funcs = [None] * N_PORT_GROUP
+
+  parse = optparse.OptionParser()
+  parse.add_option("-r", "--reset", dest="reset", action="store_true")
+  parse.add_option("-n", "--nonull", dest="nonull", action="store_true")
+  parse.add_option("-t", "--types", dest="types")
+  (opt, args) = parse.parse_args()
+
+  if opt.types:
+    _types = opt.types.split(',')
+    l = min(len(_types), N_PORT_GROUP)
+    output_funcs[0:l] = [ output_funcs_table.get(_types[i], None) for i in range(l) ]
+
+  pc = PCounter(output_callbacks=output_funcs)
+
+  # シグナルハンドラ用メソッド
+  def signal_handler(signum, stackframe):
+    if signum == signal.SIGTERM:
+      pc.save()
+      sys.exit(2)
+  signal.signal(signal.SIGTERM, signal_handler)
+
+  ret = pc.mainloop(opt.reset, opt.nonull)
+  sys.exit(ret)
 
