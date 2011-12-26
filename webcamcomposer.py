@@ -450,6 +450,7 @@ class WebcamComposerWindow(gtk.Window):
     scroll_text_view = gtk.ScrolledWindow()
     scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
     self.ent_text = gtk.TextView()
+    self.ent_text.set_size_request(-1, 64)
     scroll_text_view.add(self.ent_text)
     vbox.pack_start(scroll_text_view, True)
 
