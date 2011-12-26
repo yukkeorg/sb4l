@@ -38,22 +38,25 @@ import signal
 BASEDIR = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, BASEDIR)
 
-from pyusbio import USBIO
+import pyusbio 
 
 logger = logging.getLogger("PCounter")
-
 RC_FILE = os.path.expanduser("~/.counterrc")
 
-N_PORT_GROUP = 3
-N_BIT_GROUP = 4
-N_COUNT_GROUP = 6
+def enum(*seq, **named):
+  enums = dict(zip(seq, range(len(seq))), **named)
+  return type('Enum', (), enums)
 
-BIT_COUNT = CNT_COUNT = 0
-BIT_BONUS = CNT_BONUS = 1
-BIT_CHANCE = CNT_CHANCE = 2
-BIT_SBONUS = CNT_SBONUS = 3
-CNT_EXT_TOTALCOUNT = 4
-CNT_EXT_COMBO = 5
+WAIT_TIME = 0.1    # sec
+USBIO_BIT = enum('COUNT', 'BONUS', 'CHANCE', 'SBONUS', 
+                 'RESERVED1', 'RESERVED2', 'LAST')
+COUNT_INDEX = enum('COUNT', 'BONUS', 'CHANCE', 'SBONUS', 
+                   'TOTALCOUNT', 'CHAIN', 'USER',
+                   LAST=20 )
+
+N_BITS_GROUP = pyusbio.N_PORT / USBIO_BIT.LAST
+N_BITS = USBIO_BIT.LAST
+N_COUNTS = COUNT_INDEX.LAST
 
 if sys.platform == 'win32':
   CAHR_ENCODE = 'cp932'
@@ -65,15 +68,15 @@ class PCounter(object):
   def __init__(self, rcfile=None, outputfile=None, output_callbacks=None):
     self.rcfile = rcfile if rcfile else RC_FILE 
     self.usbio = None
-    self.counts = [ [0]*N_COUNT_GROUP ] * N_PORT_GROUP
+    self.counts = [ [0] * N_COUNTS ] * N_BITS_GROUP
     self.onFlag = 0
     if output_callbacks is None:
-      self.output_callbacks = [None] * N_PORT_GROUP
+      self.output_callbacks = [None] * N_BITS_GROUP
     else:
       self.output_callbacks = output_callbacks
 
   def init_device(self):
-    self.usbio = USBIO()
+    self.usbio = pyusbio.USBIO()
     if not self.usbio.find_and_init():
       logger.error(u"USB-IOモジュールの初期化に失敗しました。")
       return False
@@ -95,44 +98,49 @@ class PCounter(object):
       logger.error(u"カウンタ値を読み込めませんでした。原因：{0}".format(e.message))
       return False
 
-  def countup(self):
+  def countup(self, FuncToOn=None, FuncToOff=None):
     port0, port1 = self.usbio.send2read()
     port = (port1 << 8) + port0 
     # グループ単位で処理
-    for i in xrange(N_PORT_GROUP):
+    for i in xrange(N_BITS_GROUP):
       bitgroup = port & 0x0f;
+      bitgrbase = i * N_BITS
       port = port >> 4
-      for j in (BIT_COUNT, BIT_BONUS, BIT_CHANCE, BIT_SBONUS):
-        idx = i * N_BIT_GROUP + j
+      counts = self.counts[i]
+      for j in (USBIO_BIT.COUNT, USBIO_BIT.BONUS, USBIO_BIT.CHANCE, USBIO_BIT.SBONUS):
+        idx = i * N_BITS + j
         tbit = 1 << idx
-        if bitgroup & (1 << j):
+        if (bitgroup & (1 << j)) != 0:
           # 状態がOff→Onになるとき
           if self.onFlag & tbit == 0:
-            self.onFlag = self.onFlag | tbit
-            self.counts[i][j] += 1
+            self.onFlag |= tbit
+            counts[j] += 1
             # それがカウンターだったら 
-            if j == BIT_COUNT:
+            if j == USBIO_BIT.COUNT:
               # 総回転数もカウントアップする
-              self.counts[i][CNT_EXT_TOTALCOUNT] += 1
-            # それがボだったら 
-            elif j == BIT_BONUS:
-              cbit = i * N_BIT_GROUP + BIT_CHANCE
+              counts[COUNT_INDEX.TOTALCOUNT] += 1
+            # それがボーナスだったら 
+            elif j == USBIO_BIT.BIT_BONUS:
               # かつチャンス中なら
-              if bitgroup & cbit:
+              if bitgroup & (bitgrbase + USBIO_BIT.CHANCE):
                 # コンボカウンターもカウントアップする
-                self.counts[i][CNT_EXT_COMBO] += 1
+                counts[COUNT_INDEX.CHAIN] += 1
+            if FuncToOn and callable(FuncToOn):
+              FuncToOn(j, counts)
         else:
           # 状態がOn→Offになるとき
           if self.onFlag & tbit:
             self.onFlag = self.onFlag & (~tbit)
             # それがボーナスだったら
-            if j == BIT_BONUS:
+            if j == USBIO_BIT.BONUS:
               # 回転数カウンタをリセットする
-              self.counts[i][BIT_COUNT] = 0
+              counts[COUNT_INDEX.COUNT] = 0
             # それがチャンス中だったら
-            elif j == BIT_CHANCE:
+            elif j == USBIO_BIT.CHANCE:
               # コンボカウンタをリセットする
-              self.counts[i][CNT_EXT_COMBO] = 0
+              counts[COUNT_INDEX.CHAIN] = 0
+            if FuncToOff and callable(FuncToOff):
+              FuncToOff(j, counts)
 
   def mainloop(self, reset=False, nonull=False):
     self.init_device()
@@ -142,7 +150,7 @@ class PCounter(object):
     try:
       while True:
         self.countup()
-        for i in range(N_PORT_GROUP):
+        for i in range(N_BITS_GROUP):
           output_callback = self.output_callbacks[i]
           if output_callback and callable(output_callback):
             countstr = output_callback(self.counts[i])
@@ -150,7 +158,7 @@ class PCounter(object):
         if not nonull:
           sys.stdout.write("\x00")
         sys.stdout.flush()
-        time.sleep(0.2)
+        time.sleep(WAIT_TIME)
     except KeyboardInterrupt:
       pass
     finally:
@@ -173,34 +181,53 @@ def gen_combo(n_combo, suffix=None):
     combo = '\n<span size="x-large">{0:3}</span> {1}'.format(n_combo, suffix)
   return combo
 
-def output_for_stealth(counts):
-  bonus_rate = gen_bonusrate(counts[CNT_EXT_TOTALCOUNT], counts[CNT_BONUS])
-  combo = gen_combo(counts[CNT_EXT_COMBO], "Lock On!")
 
-  return u"""<span font-desc="Ricty Bold 15">GameCount:\n<span size="x-large">{0:3}</span>({1})\nBonusCount:\n<span size="x-large">{2:3}</span>/{3} ({4}){5}</span>""" \
-         .format(counts[CNT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
-                 counts[CNT_BONUS], counts[CNT_CHANCE], 
+def decolate_number(num, digit, zero_color=None):
+  if zero_color is None:
+    zero_color = "#888888"
+  s = "{{0:0{0}}}".format(digit).format(num)
+  idx = digit - len(str(num))
+  if idx < 1:
+    return s
+  return '<span color="{0}">'.format(zero_color) + s[0:idx] + '</span>' + s[idx:]
+
+
+### FOR CR STEALTH
+def output_for_stealth(counts):
+  bonus_rate = gen_bonusrate(counts[COUNT_INDEX.TOTALCOUNT], counts[COUNT_INDEX.BONUS])
+  combo = gen_combo(counts[COUNT_INDEX.CHAIN], "Lock On!")
+
+  return u"""<span font-desc="Ricty Bold 15">Games:\n<span size="x-large">{0}</span>({1})\nBonusCount:\n<span size="x-large">{2}</span>/{3} ({4}){5}</span>""" \
+         .format(decolate_number(counts[COUNT_INDEX.COUNT], 4),
+                 decolate_number(counts[COUNT_INDEX.TOTALCOUNT], 5), 
+                 decolate_number(counts[COUNT_INDEX.BONUS], 2), 
+                 decolate_number(counts[COUNT_INDEX.CHANCE], 2), 
                  bonus_rate, combo)
 
 
+### FOR CR X-FILES
 def output_for_xfiles(counts):
-  bonus_rate = gen_bonusrate(counts[CNT_EXT_TOTALCOUNT], counts[CNT_BONUS])
-  sbonus_rate = gen_bonusrate(counts[CNT_EXT_TOTALCOUNT], counts[CNT_SBONUS])
-  combo = gen_combo(counts[CNT_EXT_COMBO])
+  bonus_rate = gen_bonusrate(counts[COUNT_INDEX.TOTALCOUNT], counts[COUNT_INDEX.BONUS])
+  sbonus_rate = gen_bonusrate(counts[COUNT_INDEX.TOTALCOUNT], counts[COUNT_INDEX.SBONUS])
+  combo = gen_combo(counts[COUNT_INDEX.CHAIN])
 
-  return u"""<span font-desc="Ricty Bold 15">____\nGAME\_______\n<span size="x-large">{0:4}</span>({1})\n_____\nBONUS\________\nTOTAL:{6:5}({7})\nUZ+XR:{2:3}/{3}({4}){5}</span>""" \
-         .format(counts[CNT_COUNT], counts[CNT_EXT_TOTALCOUNT], 
-                 counts[CNT_BONUS], counts[CNT_CHANCE], bonus_rate, 
+  return u"""<span font-desc="Ricty Bold 15">GAMES\n<span size="x-large">{0}</span>/{1}\n\nAll Bonus:\n<span size="large">{6}</span>({7})\nUZ+XR/UZ:\n<span size="large">{2}/{3}</span>{5}</span>""" \
+         .format(decolate_number(counts[COUNT_INDEX.COUNT], 4), 
+                 decolate_number(counts[COUNT_INDEX.TOTALCOUNT], 5), 
+                 decolate_number(counts[COUNT_INDEX.BONUS], 2),
+                 decolate_number(counts[COUNT_INDEX.CHANCE], 2), 
+                 bonus_rate, 
                  combo,
-                 counts[CNT_SBONUS], sbonus_rate)
+                 decolate_number(counts[COUNT_INDEX.SBONUS], 4),
+                 sbonus_rate)
 
 
 if __name__ == '__main__':
   output_funcs_table = {
-      'stealth' : output_for_stealth,
-      'xfiles'  : output_for_xfiles,
+    'stealth' : output_for_stealth,
+    'xfiles'  : output_for_xfiles,
   }
-  output_funcs = [None] * N_PORT_GROUP
+  output_funcs = [None] * N_BITS_GROUP
 
   parse = optparse.OptionParser()
   parse.add_option("-r", "--reset", dest="reset", action="store_true")
@@ -210,7 +237,7 @@ if __name__ == '__main__':
 
   if opt.types:
     _types = opt.types.split(',')
-    l = min(len(_types), N_PORT_GROUP)
+    l = min(len(_types), N_BITS_GROUP)
     output_funcs[0:l] = [ output_funcs_table.get(_types[i], None) for i in range(l) ]
 
   pc = PCounter(output_callbacks=output_funcs)
