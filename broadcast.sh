@@ -14,10 +14,11 @@ RTMP_URI="${1:-dummy.swf}"
 STREAM="$2"
 
 # --- Settings ---
+VIDEO_FMT="video4linux2"
 VIDEO_SOURCE="/dev/video1"
-FPS="30"
 VBITRATE="280"
 
+AUDIO_FMT="alsa"
 AUDIO_SOURCE="pulse"
 ASAMPLINGRATE="44100"
 ABITRATE="96"
@@ -30,11 +31,15 @@ else
   OUTPUT_URI="${RTMP_URI}"
 fi
 
-# --- Muxing video/audio and starting stream with ffmpeg to server.
+# --- Muxing video/audio and sending stream to server with ffmpeg.
 ffmpeg -y -stats -threads 0 \
-       -f video4linux2 -i ${VIDEO_SOURCE} -bt ${VBITRATE}k \
-       -f alsa -i ${AUDIO_SOURCE} -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} -async 1 \
+       -f ${VIDEO_FMT} -i ${VIDEO_SOURCE} -bt ${VBITRATE}k \
+       -f ${AUDIO_FMT} -i ${AUDIO_SOURCE} -ar ${ASAMPLINGRATE} \
+           -ab ${ABITRATE}k -ac ${ACHANNEL} \
        -vcodec libx264 -vpre medium -x264opts "bitrate=${VBITRATE}" -level 31 \
        -acodec libfaac \
-       -f flv -r ${FPS} \
-       "${OUTPUT_URI}"
+       -f flv \
+       "${OUTPUT_URI}" &
+
+wait
+
