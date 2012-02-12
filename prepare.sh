@@ -1,8 +1,13 @@
 #!/bin/sh
-WEBCAMCONF="${HOME}/.default.gpfl"
+SOURCEDIR=$(dirname "$0")
+
+. ${SOURCEDIR}/config
+
+WEBCAMCONF="${SOURCEDIR}/webcamsettings/${CAMERANAME}.gpfl"
 
 # --- Install v4l2loopback module
-if ! lsmod | grep -q v4l2loopback; then
+grep -q v4l2loopback /proc/modules >/dev/null 2>&1
+if [ "$?" != "0" ]; then
    sudo modprobe v4l2loopback
 fi
 

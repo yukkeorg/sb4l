@@ -48,8 +48,8 @@ pygst.require('0.10')
 import gst
 
 
-_SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
-_N_TELOP = 4
+SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
+N_TELOP = 4
 
 _CCS_HALIGN = {
   'left'   : 0,
@@ -85,7 +85,7 @@ class WebcamComposerSetting(object):
       'ypad' : '0',
       'text' : '',
       '_is_cmd' : False,
-    } for i in xrange(_N_TELOP) ]
+    } for i in xrange(N_TELOP) ]
 
 
   def merge(self, other):
@@ -124,13 +124,15 @@ def loadSetting(fn):
     pass
   return None
       
-setting = loadSetting(_SETTING_FILENAME) or WebcamComposerSetting()
+setting = loadSetting(SETTING_FILENAME) or WebcamComposerSetting()
 
 
 
 
 class WebcamComposer(object):
-  ALLOW_TELOP_PROP_NAME = ("halignment", "valignment", "line-alignment", "xpad", "ypad", "text")
+  ALLOW_TELOP_PROP_NAME = ("halignment", "valignment", 
+                           "line-alignment", "xpad", "ypad", 
+                           "text", "shaded-background")
 
   def __init__(self, prev_panel=None, on_err_callback=None):
     self.prev_panel = prev_panel
@@ -145,7 +147,7 @@ class WebcamComposer(object):
     self.camerasource = gst.element_factory_make('v4l2src')
     capsfilter = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
-    self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(_N_TELOP) ]
+    self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.avsink = gst.element_factory_make('xvimagesink')
     tee = gst.element_factory_make('tee')
@@ -154,9 +156,11 @@ class WebcamComposer(object):
     queue3 = gst.element_factory_make('queue')
 
     self.player.add(self.camerasource, videorate, capsfilter,
-                    self.v4l2sink, self.avsink, tee, queue1, queue2, queue3,
+                    self.v4l2sink, self.avsink, tee, 
+                    queue1, queue2, queue3,
                     *self.telops)
-    firstelements = [self.camerasource, queue1, videorate, capsfilter] + self.telops + [ tee ]
+    firstelements = [self.camerasource, queue1, videorate, 
+                     capsfilter] + self.telops + [ tee ]
     gst.element_link_many(*firstelements)
     gst.element_link_many(tee, queue2, self.v4l2sink)
     gst.element_link_many(tee, queue3, self.avsink)
@@ -171,7 +175,7 @@ class WebcamComposer(object):
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
     self.v4l2sink.set_property('device', setting.DST_DEVICE)
 
-    for i in xrange(_N_TELOP):
+    for i in xrange(N_TELOP):
       telop = self.telops[i]
       try:
         tp = setting.TELOP_PROPERTIES[i]
@@ -249,7 +253,7 @@ class WebcamComposer(object):
 
 class StdoutReader(object):
   SR_START = 1
-  SR_BUFFERED = 2
+  SR_READY = 2
   SR_END = 3 
 
   def __init__(self, cmd_and_args, callback, telop_no):
@@ -262,12 +266,24 @@ class StdoutReader(object):
 
   def _spawn(self):
     try:
-      self.child = subprocess.Popen(self.cmd_and_args, stdout=subprocess.PIPE, close_fds=True)
-      glib.io_add_watch(self.child.stdout, glib.IO_IN | glib.IO_HUP, self._event)
-      if self.callback:
-        self.callback(self.SR_START, self, None)
-    except (OSError, glib.GError), e:
+      self.child = subprocess.Popen(self.cmd_and_args, 
+                                    stdout=subprocess.PIPE, 
+                                    close_fds=True)
+    except OSError, e:
       print(e.message)
+      return
+
+    try:
+      glib.io_add_watch(self.child.stdout, 
+                        glib.IO_IN | glib.IO_HUP, 
+                        self._event)
+    except glib.GError, e:
+      self.terminate()
+      print(e.message)
+      return
+
+    if self.callback:
+        self.callback(self.SR_START, self, None)
 
 
   def _event(self, fd, condition):
@@ -280,7 +296,7 @@ class StdoutReader(object):
         text.append(data)
       text = ''.join(text)
       if self.callback:
-        self.callback(self.SR_BUFFERED, self, text)
+        self.callback(self.SR_READY, self, text)
 
     if condition & glib.IO_HUP:
       self.child.poll()
@@ -297,7 +313,7 @@ class StdoutReader(object):
 
   def is_running(self):
     if self.child:
-      return self.child.returncode is None
+      return (self.child.returncode is None)
     else:
       return False
 
@@ -308,7 +324,7 @@ class WebcamComposerWindow(gtk.Window):
   def __init__(self):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
     self.player = None
-    self.spawnlist = [None] * _N_TELOP
+    self.spawnlist = [None] * N_TELOP
 
     self.build_window()
     self.set_values()
@@ -396,7 +412,7 @@ class WebcamComposerWindow(gtk.Window):
     self.cmb_text_idx = gtk.combo_box_new_text()
     self.cmb_text_idx.connect('changed', self.on_cmb_text_idx_changed)
     hbox.pack_start(self.cmb_text_idx, True)
-    for i in xrange(_N_TELOP):
+    for i in xrange(N_TELOP):
       self.cmb_text_idx.append_text(str(i))
 
     hbox.pack_start(gtk.Label("V:"), False)
@@ -420,12 +436,12 @@ class WebcamComposerWindow(gtk.Window):
     self.cmb_text_lalign.append_text("center")
     self.cmb_text_lalign.append_text("right")
 
-    hbox.pack_start(gtk.Label("xpad:"), False)
+    hbox.pack_start(gtk.Label("X-pad:"), False)
     self.ent_text_xpad = gtk.Entry()
     self.ent_text_xpad.set_size_request(50, -1)
     hbox.pack_start(self.ent_text_xpad, True)
 
-    hbox.pack_start(gtk.Label("ypad:"), False)
+    hbox.pack_start(gtk.Label("Y-pad:"), False)
     self.ent_text_ypad = gtk.Entry()
     self.ent_text_ypad.set_size_request(50, -1)
     hbox.pack_start(self.ent_text_ypad, True)
@@ -437,10 +453,18 @@ class WebcamComposerWindow(gtk.Window):
     self.chk_text_is_cmdline.set_alignment(0, 0)
     hbox2.pack_start(self.chk_text_is_cmdline, False)
 
+    self.btn_exec = gtk.Button("Exec")
+    self.btn_exec.connect("clicked", self.on_exec)
+    self.btn_exec.set_sensitive(False)
+    hbox2.pack_start(self.btn_exec, False)
+
     self.btn_kill = gtk.Button("Kill")
     self.btn_kill.connect("clicked", self.on_kill)
     self.btn_kill.set_sensitive(False)
     hbox2.pack_start(self.btn_kill, False)
+
+    self.chk_background = gtk.CheckButton("Shaded Background")
+    hbox2.pack_start(self.chk_background, False)
 
     self.btn_update = gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
@@ -537,7 +561,6 @@ class WebcamComposerWindow(gtk.Window):
         _CCS_HALIGN.get(properties.get('line-alignment', 'left'), 0))
     self.ent_text_xpad.set_text(str(properties.get('xpad', 0)))
     self.ent_text_ypad.set_text(str(properties.get('ypad', 0)))
-    self.ent_text.get_buffer().set_text(properties.get('text', ''))
     is_cmd = properties.get('_is_cmd', False)
     self.chk_text_is_cmdline.set_active(is_cmd)
     self.btn_kill.set_sensitive(False)
@@ -545,6 +568,8 @@ class WebcamComposerWindow(gtk.Window):
       spawn = self.spawnlist[idx]
       if spawn and spawn.is_running():
         self.btn_kill.set_sensitive(True)
+    self.chk_background.set_active(1 if properties.get('shaded-background', False) else 0)
+    self.ent_text.get_buffer().set_text(properties.get('text', ''))
 
 
   def on_update(self, widget, *args):
@@ -552,9 +577,10 @@ class WebcamComposerWindow(gtk.Window):
     properties['halignment'] = self.cmb_text_halign.get_active_text()
     properties['valignment'] = self.cmb_text_valign.get_active_text()
     properties['line-alignment'] = self.cmb_text_lalign.get_active_text()
-    properties['_is_cmd'] = self.chk_text_is_cmdline.get_active()
     properties['xpad'] = int(self.ent_text_xpad.get_text())
     properties['ypad'] = int(self.ent_text_ypad.get_text())
+    properties['_is_cmd'] = self.chk_text_is_cmdline.get_active()
+    properties['shaded-background'] = 1 if self.chk_background.get_active() else 0
     properties['text'] = self.getTextViewValue(self.ent_text)
 
     no = self.cmb_text_idx.get_active()
@@ -585,14 +611,18 @@ class WebcamComposerWindow(gtk.Window):
                                    on_err_callback=self.on_cc_error)
       self.player.set_state(gst.STATE_PAUSED)
       self.player.set_state(gst.STATE_PLAYING)
-      self.btn_camera_tgl.set_label("Camera On")
+      self.btn_camera_tgl.set_label("Camera Off")
     else:
       for spawn in self.spawnlist:
         if spawn and spawn.is_running():
           spawn.terminate()
       self.player.set_state(gst.STATE_NULL)
       self.player = None
-      self.btn_camera_tgl.set_label("Camera Off")
+      self.btn_camera_tgl.set_label("Camera On")
+
+
+  def on_exec(self, widget):
+    pass
 
 
   def on_kill(self, widget):
@@ -623,7 +653,7 @@ class WebcamComposerWindow(gtk.Window):
 
   def on_read_from_stdout(self, msgtype, sr, text):
     """ StdoutReader read data from stdout callback """
-    if msgtype == StdoutReader.SR_BUFFERED:
+    if msgtype == StdoutReader.SR_READY:
       if self.player:
         self.player.set_telop_text(sr.telop_no, text)
     elif msgtype == StdoutReader.SR_START:
@@ -649,5 +679,5 @@ if __name__ == "__main__":
   cm = WebcamComposerWindow()
   gtk.gdk.threads_init()
   gtk.main()
-  saveSetting(_SETTING_FILENAME, setting)
+  saveSetting(SETTING_FILENAME, setting)
 
