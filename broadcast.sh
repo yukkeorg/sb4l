@@ -34,15 +34,15 @@ ffmpeg -y -stats -threads 0 \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} -ar ${ASAMPLINGRATE} \
            -ab ${ABITRATE}k -ac ${ACHANNEL} \
        -vcodec libx264 \
-           -pass 1 \
-           -flags "+loop" \
+           -flags "+loop" -deblock 0:0 \
+           -refs 4 -subq 6 -bf 16 -b_strategy 1 \
            -b-pyramid 1 -wpredp 1 -mixed-refs 1 -mbtree 1 -fast-pskip 0 \
            -cmp "+chroma" \
-           -subq 6 -qmin 10 -qmax 51 -keyint_min 25 -b ${VBITRATE}k \
+            -qmin 10 -qmax 51 -keyint_min 25 -b ${VBITRATE}k \
            -partitions i4x4,p8x8,p4x4,b8x8,i8x8 \
-           -sc_threshold 10 -g 50 \
+           -sc_threshold 70 -g 250 \
        -acodec libfaac \
-       -f flv \
+       -f flv -s 512x384 \
        "${OUTPUT_URI}" &
 
 wait
