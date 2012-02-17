@@ -13,8 +13,6 @@ SOURCEDIR=$(dirname "$0")
 RTMP_URI="$1"
 STREAM="$2"
 
-. ${SOURCEDIR}/config
-
 if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
   if [ "${RTMP_URI}x" = "localx" ]; then
     OUTPUT_URI=test.flv
@@ -25,7 +23,22 @@ if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
 fi
 
 if [ "${OUTPUT_URI}x" = "x" ]; then
-  OUTPUT_URI="${RTMP_URI}/${STREAM} flashver=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
+  OUTPUT_URI="${RTMP_URI}/${STREAM} 
+              flashver=FME/3.0\20(compatible;\20FMSc/1.0) 
+              swfUrl=${RTMP_URI}"
+fi
+
+if [ -e ${SOURCEDIR}/config ]; then  
+  . ${SOURCEDIR}/config || exit 1
+else
+  echo "Can't open config file." >2
+  exit 1
+fi
+if [ -e ${SOURCEDIR}/broadcast.d/${BROADCASTER} ]; then
+  . ${SOURCEDIR}/broadcast.d/${BROADCASTER}
+else
+  echo "Can't open broadcast.d/${BROADCASTER}" >2
+  exit 2
 fi
 
 # --- Muxing video/audio and sending stream to server with ffmpeg.
@@ -33,17 +46,9 @@ ffmpeg -y -stats -threads 0 \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} -bt ${VBITRATE}k \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} -ar ${ASAMPLINGRATE} \
            -ab ${ABITRATE}k -ac ${ACHANNEL} \
-       -vcodec libx264 \
-           -flags "+loop" -deblock 0:0 \
-           -refs 4 -subq 6 -bf 16 -b_strategy 1 \
-           -b-pyramid 1 -wpredp 1 -mixed-refs 1 -mbtree 1 -fast-pskip 0 \
-           -cmp "+chroma" \
-            -qmin 10 -qmax 51 -keyint_min 25 -b ${VBITRATE}k \
-           -partitions i4x4,p8x8,p4x4,b8x8,i8x8 \
-           -sc_threshold 70 -g 250 \
-       -acodec libfaac \
-       -f flv -s 512x384 \
+       ${VCODEC_OPTS} \
+       ${ACODEC_OPTS} \
+       ${OUTPUT_OPTS} \
        "${OUTPUT_URI}" &
-
 wait
 
