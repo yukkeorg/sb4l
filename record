@@ -9,7 +9,7 @@ SOURCEDIR=$(dirname "$0")
 OUTPUT_FILE="${1:-record.dat}"
 
 if [ -e ${SOURCEDIR}/config/global ]; then
-  . ${SOURCEDIR}/config
+  . ${SOURCEDIR}/config/global
 else
   echo "Can't open config/global file." >2
   exit 1
