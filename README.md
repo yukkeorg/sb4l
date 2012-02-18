@@ -1,6 +1,6 @@
 <!-- vim: set noet ts=2 sts=2 sw=2 ft=markdown : -->
 
-Simple Webcam Broadcasting Tools For Linux (swbt4l)
+Simple Webcam Broadcasting Tool For Linux (swbt4l)
 ===================================================
 
 swbt4l is a very simple webcam broadcasting tools with Shellscript and Python.
