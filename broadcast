@@ -28,16 +28,16 @@ if [ "${OUTPUT_URI}x" = "x" ]; then
               swfUrl=${RTMP_URI}"
 fi
 
-if [ -e ${SOURCEDIR}/config ]; then  
-  . ${SOURCEDIR}/config || exit 1
+if [ -e ${SOURCEDIR}/config/global ]; then  
+  . ${SOURCEDIR}/config/global || exit 1
 else
-  echo "Can't open config file." >2
+  echo "Can't open config/global file." >2
   exit 1
 fi
-if [ -e ${SOURCEDIR}/broadcast.d/${BROADCASTER} ]; then
-  . ${SOURCEDIR}/broadcast.d/${BROADCASTER}
+if [ -e ${SOURCEDIR}/config/broadcast.d/${BROADCASTER} ]; then
+  . ${SOURCEDIR}/config/broadcast.d/${BROADCASTER}
 else
-  echo "Can't open broadcast.d/${BROADCASTER}" >2
+  echo "Can't open config/broadcast.d/${BROADCASTER}" >2
   exit 2
 fi
 
