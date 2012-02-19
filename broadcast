@@ -2,7 +2,7 @@
 #
 # broadcast.sh
 # ============
-# This is script which broadcast with a webcam to NiconicoNamahousou.
+# This is script which broadcast with a webcam  
 # Sorry, this is for Linix only.
 # 
 # Required extra tools:
@@ -23,9 +23,7 @@ if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
 fi
 
 if [ "${OUTPUT_URI}x" = "x" ]; then
-  OUTPUT_URI="${RTMP_URI}/${STREAM} 
-              flashver=FME/3.0\20(compatible;\20FMSc/1.0) 
-              swfUrl=${RTMP_URI}"
+  OUTPUT_URI="${RTMP_URI}/${STREAM} flashver=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
 fi
 
 if [ -e ${SOURCEDIR}/config/global ]; then  
@@ -42,13 +40,10 @@ else
 fi
 
 # --- Muxing video/audio and sending stream to server with ffmpeg.
-ffmpeg -y -stats -threads 0 \
+exec ffmpeg -y -stats -threads 0 \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} -bt ${VBITRATE}k \
-       -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} -ar ${ASAMPLINGRATE} \
-           -ab ${ABITRATE}k -ac ${ACHANNEL} \
-       ${VCODEC_OPTS} \
-       ${ACODEC_OPTS} \
-       ${OUTPUT_OPTS} \
+       -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
+           -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
+       ${VCODEC_OPTS} ${ACODEC_OPTS} ${OUTPUT_OPTS} \
        "${OUTPUT_URI}" &
-wait
 

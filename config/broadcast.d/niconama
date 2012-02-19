@@ -7,8 +7,7 @@ VCODEC_OPTS="-vcodec libx264
              -flags +loop -deblock 0:0 
              -refs 4 -subq 6 -bf 16 -b_strategy 1 
              -b-pyramid 1 -wpredp 1 -mixed-refs 1 -mbtree 1 -fast-pskip 0 
-             -cmp +chroma
-             -qmin 10 -qmax 51 -keyint_min 25 -b ${VBITRATE}k
+             -cmp +chroma -qmin 10 -qmax 51 -keyint_min 25 
              -partitions i4x4,p8x8,p4x4,b8x8,i8x8 
              -sc_threshold 70 -g 250"
 
