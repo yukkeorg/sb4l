@@ -45,5 +45,5 @@ exec ffmpeg -y -stats -threads 0 \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
            -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
        ${VCODEC_OPTS} ${ACODEC_OPTS} ${OUTPUT_OPTS} \
-       "${OUTPUT_URI}" &
+       "${OUTPUT_URI}"
 
