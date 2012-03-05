@@ -6,8 +6,8 @@ Simple Webcam Broadcasting Tool For Linux (swbt4l)
 swbt4l is a very simple webcam broadcasting tools with Shellscript and Python.
 This tools works, require other open source softwares. please see below.
 
-Require Application and Modules
--------------------------------
+Require Applications
+--------------------
 
 - ffmpeg N-37669-gf2b20b7 or later (compile with librtmp, libfaac and libx264)
   - https://ffmpeg.org/
@@ -15,8 +15,12 @@ Require Application and Modules
   - https://github.com/umlaeute/v4l2loopback
 - guvcview
   - http://guvcview.sourceforge.net/index.html
-- Python 2.7.x without 3.0
+- Python 2.7.x without 3.x.x
   - http://www.python.org/
+
+Require Python Modules
+----------------------
+
 - gst-python
   - http://gstreamer.freedesktop.org/modules/gst-python.html
 - PyGtk
