@@ -154,21 +154,25 @@ class WebcamComposer(object):
     queue1 = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
     queue3 = gst.element_factory_make('queue')
+    colorspace = gst.element_factory_make('ffmpegcolorspace')
 
     self.player.add(self.camerasource, videorate, capsfilter,
                     self.v4l2sink, self.avsink, tee, 
-                    queue1, queue2, queue3,
+                    queue1, queue2, queue3, colorspace,
                     *self.telops)
     firstelements = [self.camerasource, queue1, videorate, 
                      capsfilter] + self.telops + [ tee ]
     gst.element_link_many(*firstelements)
     gst.element_link_many(tee, queue2, self.v4l2sink)
-    gst.element_link_many(tee, queue3, self.avsink)
+    gst.element_link_many(tee, queue3, colorspace, self.avsink)
 
     ########################
     # Configuring Elements #
     ########################
+    # v4l2src property
     self.camerasource.set_property('device', setting.SRC_DEVICE)
+    self.camerasource.set_property('blocksize', 65536)
+    # caps property
     srccaps = '{0},width={1},height={2},framerate={3}' \
                .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
                        setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
@@ -191,6 +195,7 @@ class WebcamComposer(object):
         telop.set_property("text", "")
       else:
         telop.set_property("text", tp.get("text", ""))
+
     ########################
     # Connecting Callbacks #
     ########################
@@ -634,13 +639,13 @@ class WebcamComposerWindow(gtk.Window):
     
   def on_delete(self, widget, *args):
     print("OnDelete is called.")
+    if self.player:
+      self.player.set_state(gst.STATE_NULL)
     return False 
 
 
   def on_destroy(self, widget, *args):
-    print("OnQuit is called.")
-    if self.player:
-      self.player.set_state(gst.STATE_NULL)
+    print("OnDestroy is called.")
     gtk.main_quit()
 
 
@@ -649,6 +654,10 @@ class WebcamComposerWindow(gtk.Window):
   def on_cc_error(self, message): 
     """ WebcamComposer Error Callback """
     print("{0}:{1}".format(*message), file=sys.stderr)
+    if self.player:
+      self.player.set_state(gst.STATE_NULL)
+    self.btn_camera_tgl.set_active(False)
+    self.btn_camera_tgl.set_label("Camera Off")
 
 
   def on_read_from_stdout(self, msgtype, sr, text):
