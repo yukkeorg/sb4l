@@ -18,6 +18,6 @@ fi
 
 guvcview -o -l "$WEBCAMCONF" >/dev/null 2>&1 &
 
-${SOURCEDIR}/tool/webcamcomposer &
+python ${SOURCEDIR}/tool/webcamcomposer.py &
 
 
