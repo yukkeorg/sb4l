@@ -23,8 +23,7 @@ if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
 fi
 
 if [ "${OUTPUT_URI}x" = "x" ]; then
-  #OUTPUT_URI="${RTMP_URI}/${STREAM} flashver=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
-  OUTPUT_URI="${RTMP_URI}/${STREAM} swfUrl=${RTMP_URI}"
+  OUTPUT_URI="${RTMP_URI}/${STREAM} flashver=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
 fi
 
 if [ -e ${SOURCEDIR}/config/global ]; then  
@@ -47,9 +46,4 @@ exec ffmpeg -y -stats -threads 0 \
            -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
        ${VCODEC_OPTS} ${ACODEC_OPTS} ${OUTPUT_OPTS} \
        "${OUTPUT_URI}"
-# exec ffmpeg -y -stats -threads 0 \
-#        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
-#            -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
-#        ${ACODEC_OPTS} ${OUTPUT_OPTS} \
-#        "${OUTPUT_URI}"
 
