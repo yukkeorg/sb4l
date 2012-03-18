@@ -13,6 +13,8 @@ Require Applications
 
 - ffmpeg N-37669-gf2b20b7 or later (compile with librtmp, libfaac and libx264)
   - https://ffmpeg.org/
+- Gstreamer 0.10.32 or later, but 0.10.36 is not work. 
+  - http://gstreamer.freedesktop.org/
 - v4l2loopback 0.5.0 or later
   - https://github.com/umlaeute/v4l2loopback
 - guvcview
