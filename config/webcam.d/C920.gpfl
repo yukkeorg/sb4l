@@ -10,11 +10,11 @@ ID{0x00980902};CHK{0:255:1:128}=VAL{132}
 #White Balance Temperature, Auto
 ID{0x0098090c};CHK{0:1:1:1}=VAL{0}
 #Gain
-ID{0x00980913};CHK{0:255:1:0}=VAL{13}
+ID{0x00980913};CHK{0:255:1:0}=VAL{10}
 #Power Line Frequency
 ID{0x00980918};CHK{0:2:1:2}=VAL{2}
 #White Balance Temperature
-ID{0x0098091a};CHK{2000:6500:1:4000}=VAL{5131}
+ID{0x0098091a};CHK{2000:6500:1:4000}=VAL{5061}
 #Sharpness
 ID{0x0098091b};CHK{0:255:1:128}=VAL{255}
 #Backlight Compensation
@@ -22,7 +22,7 @@ ID{0x0098091c};CHK{0:1:1:0}=VAL{1}
 #Exposure, Auto
 ID{0x009a0901};CHK{0:3:1:3}=VAL{1}
 #Exposure (Absolute)
-ID{0x009a0902};CHK{3:2047:1:250}=VAL{189}
+ID{0x009a0902};CHK{3:2047:1:250}=VAL{146}
 #Exposure, Auto Priority
 ID{0x009a0903};CHK{0:1:1:0}=VAL{0}
 #Pan (Absolute)
@@ -30,7 +30,7 @@ ID{0x009a0908};CHK{-36000:36000:3600:0}=VAL{0}
 #Tilt (Absolute)
 ID{0x009a0909};CHK{-36000:36000:3600:0}=VAL{0}
 #Focus (absolute)
-ID{0x009a090a};CHK{0:250:5:0}=VAL{30}
+ID{0x009a090a};CHK{0:250:5:0}=VAL{0}
 #Focus, Auto
 ID{0x009a090c};CHK{0:1:1:1}=VAL{0}
 #Zoom, Absolute
