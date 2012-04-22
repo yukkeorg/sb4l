@@ -23,7 +23,7 @@ if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
 fi
 
 if [ "${OUTPUT_URI}x" = "x" ]; then
-  OUTPUT_URI="${RTMP_URI}/${STREAM} flashver=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
+  OUTPUT_URI="${RTMP_URI}/${STREAM} flashVer=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${STREAM}"
 fi
 
 if [ -e ${SOURCEDIR}/config/global ]; then  
