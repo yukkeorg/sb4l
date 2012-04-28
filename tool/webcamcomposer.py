@@ -38,10 +38,7 @@ try:
 except ImportError:
   import pickle
 
-import pygtk
-pygtk.require('2.0')
-import gtk
-import glib
+from gi.repository import GLib, Gtk, Gdk
 
 import pygst
 pygst.require('0.10')
@@ -186,7 +183,8 @@ class WebcamComposer(object):
       except IndexError:
         tp = { "_is_cmd" : False }
 
-      telop.set_property("halignment", tp.get("halignment", "left"))  
+      telop.set_property("halignment", tp.get("halignment", "left"))
+      print(" ***************** " + tp.get("halignment", "left"))
       telop.set_property("valignment", tp.get("valignment", "top"))  # top, bottom, center
       telop.set_property("line-alignment",  tp.get("line-alignment", "left"))  # left, right
       telop.set_property("xpad", int(tp.get("xpad", 0))) 
@@ -250,9 +248,9 @@ class WebcamComposer(object):
       imagesink = message.src
       imagesink.set_property("force-aspect-ratio", True)
       if self.prev_panel: 
-        gtk.gdk.threads_enter()
+        Gtk.gdk.threads_enter()
         imagesink.set_xwindow_id(self.prev_panel.window.xid)
-        gtk.gdk.threads_leave()
+        Gtk.gdk.threads_leave()
 
 
 
@@ -279,10 +277,10 @@ class StdoutReader(object):
       return
 
     try:
-      glib.io_add_watch(self.child.stdout, 
-                        glib.IO_IN | glib.IO_HUP, 
+      GLib.io_add_watch(self.child.stdout, 
+                        GLib.IO_IN | GLib.IO_HUP, 
                         self._event)
-    except glib.GError, e:
+    except GLib.GError, e:
       self.terminate()
       print(e.message)
       return
@@ -292,7 +290,7 @@ class StdoutReader(object):
 
 
   def _event(self, fd, condition):
-    if condition & glib.IO_IN:
+    if condition & GLib.IO_IN:
       text = []
       while True:
         data = fd.read(1)
@@ -303,7 +301,7 @@ class StdoutReader(object):
       if self.callback:
         self.callback(self.SR_READY, self, text)
 
-    if condition & glib.IO_HUP:
+    if condition & GLib.IO_HUP:
       self.child.poll()
       if self.callback:
         self.callback(self.SR_END, self, None)
@@ -325,9 +323,9 @@ class StdoutReader(object):
 
 
 
-class WebcamComposerWindow(gtk.Window):
+class WebcamComposerWindow(Gtk.Window):
   def __init__(self):
-    gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
+    Gtk.Window.__init__(self, Gtk.WindowType.TOPLEVEL)
     self.player = None
     self.spawnlist = [None] * N_TELOP
 
@@ -341,195 +339,195 @@ class WebcamComposerWindow(gtk.Window):
     self.connect("delete-event", self.on_delete)
     self.connect("destroy", self.on_destroy)
 
-    vbox_root = gtk.VBox()
+    vbox_root = Gtk.VBox()
     self.add(vbox_root)
 
     self.menubar = self.build_menu()
-    vbox_root.pack_start(self.menubar, False)
+    vbox_root.pack_start(self.menubar, False, True, 0)
 
-    vbox_main = gtk.VBox()
+    vbox_main = Gtk.VBox()
     vbox_main.set_spacing(8)
-    vbox_root.pack_start(vbox_main, True)
+    vbox_root.pack_start(vbox_main, True, True, 0)
 
-    vbox_main.pack_start(self.build_camera_box(), True)
-    vbox_main.pack_start(self.build_telop_box(), False)
+    vbox_main.pack_start(self.build_camera_box(), True, True, 0)
+    vbox_main.pack_start(self.build_telop_box(), False, True, 0)
     # vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
 
 
   def build_camera_box(self):
-    vbox = gtk.VBox()
+    vbox = Gtk.VBox()
 
-    hbox = gtk.HBox()
+    hbox = Gtk.HBox()
     hbox.set_spacing(8)
-    vbox.pack_start(hbox, False)
+    vbox.pack_start(hbox, False, True, 0)
 
-    hbox.pack_start(gtk.Label("Src:"), False)
-    self.ent_camera_src = gtk.Entry()
+    hbox.pack_start(Gtk.Label("Src:"), False, True, 0)
+    self.ent_camera_src = Gtk.Entry()
     self.ent_camera_src.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_src, False)
+    hbox.pack_start(self.ent_camera_src, False, True, 0)
 
-    hbox.pack_start(gtk.Label("Fmt:"), False)
-    self.ent_camera_fmt = gtk.Entry()
+    hbox.pack_start(Gtk.Label("Fmt:"), False, True, 0)
+    self.ent_camera_fmt = Gtk.Entry()
     self.ent_camera_fmt.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_fmt, False)
+    hbox.pack_start(self.ent_camera_fmt, False, True, 0)
 
-    hbox.pack_start(gtk.Label("Width:"), False)
-    self.ent_camera_width = gtk.Entry()
+    hbox.pack_start(Gtk.Label("Width:"), False, True, 0)
+    self.ent_camera_width = Gtk.Entry()
     self.ent_camera_width.set_size_request(50, -1)
-    hbox.pack_start(self.ent_camera_width, False)
+    hbox.pack_start(self.ent_camera_width, False, True, 0)
 
-    hbox.pack_start(gtk.Label("Height:"), False)
-    self.ent_camera_height = gtk.Entry()
+    hbox.pack_start(Gtk.Label("Height:"), False, True, 0)
+    self.ent_camera_height = Gtk.Entry()
     self.ent_camera_height.set_size_request(50, -1)
-    hbox.pack_start(self.ent_camera_height, False)
+    hbox.pack_start(self.ent_camera_height, False, True, 0)
 
-    hbox.pack_start(gtk.Label("FPS:"), False)
-    self.ent_camera_fps= gtk.Entry()
+    hbox.pack_start(Gtk.Label("FPS:"), False, True, 0)
+    self.ent_camera_fps= Gtk.Entry()
     self.ent_camera_fps.set_size_request(50, -1)
-    hbox.pack_start(self.ent_camera_fps, False)
+    hbox.pack_start(self.ent_camera_fps, False, True, 0)
 
-    hbox.pack_start(gtk.Label("Dst:"), False)
-    self.ent_camera_dst= gtk.Entry()
+    hbox.pack_start(Gtk.Label("Dst:"), False, True, 0)
+    self.ent_camera_dst= Gtk.Entry()
     self.ent_camera_dst.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_dst, False)
+    hbox.pack_start(self.ent_camera_dst, False, True, 0)
 
-    self.btn_camera_tgl = gtk.ToggleButton("Camera Off")
+    self.btn_camera_tgl = Gtk.ToggleButton("Camera Off")
     self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
-    hbox.pack_start(self.btn_camera_tgl, True)
+    hbox.pack_start(self.btn_camera_tgl, True, True, 0)
 
-    self.movie_window = gtk.DrawingArea()
-    vbox.pack_start(self.movie_window, True)
+    self.movie_window = Gtk.DrawingArea()
+    vbox.pack_start(self.movie_window, True, True, 0)
 
     return vbox
 
 
   def build_telop_box(self):
-    vbox = gtk.VBox()
+    vbox = Gtk.VBox()
     vbox.set_spacing(8)
 
-    hbox = gtk.HBox()
+    hbox = Gtk.HBox()
     hbox.set_spacing(8)
-    vbox.pack_start(hbox, True)
+    vbox.pack_start(hbox, True, True, 0)
 
-    hbox.pack_start(gtk.Label("TNO."), False)
-    self.cmb_text_idx = gtk.combo_box_new_text()
+    hbox.pack_start(Gtk.Label("TNO."), False, True, 0)
+    self.cmb_text_idx = Gtk.ComboBoxText()
     self.cmb_text_idx.connect('changed', self.on_cmb_text_idx_changed)
-    hbox.pack_start(self.cmb_text_idx, True)
+    hbox.pack_start(self.cmb_text_idx, True, True, 0)
     for i in xrange(N_TELOP):
       self.cmb_text_idx.append_text(str(i))
 
-    hbox.pack_start(gtk.Label("V:"), False)
-    self.cmb_text_valign = gtk.combo_box_new_text()
-    hbox.pack_start(self.cmb_text_valign, True)
+    hbox.pack_start(Gtk.Label("V:"), False, True, 0)
+    self.cmb_text_valign = Gtk.ComboBoxText()
+    hbox.pack_start(self.cmb_text_valign, True, True, 0)
     self.cmb_text_valign.append_text("top")
     self.cmb_text_valign.append_text("center")
     self.cmb_text_valign.append_text("bottom")
 
-    hbox.pack_start(gtk.Label("H:"), False)
-    self.cmb_text_halign = gtk.combo_box_new_text()
-    hbox.pack_start(self.cmb_text_halign, True)
+    hbox.pack_start(Gtk.Label("H:"), False, True, 0)
+    self.cmb_text_halign = Gtk.ComboBoxText()
+    hbox.pack_start(self.cmb_text_halign, True, True, 0)
     self.cmb_text_halign.append_text("left")
     self.cmb_text_halign.append_text("center")
     self.cmb_text_halign.append_text("right")
 
-    hbox.pack_start(gtk.Label("Line:"), False)
-    self.cmb_text_lalign = gtk.combo_box_new_text()
-    hbox.pack_start(self.cmb_text_lalign, True)
+    hbox.pack_start(Gtk.Label("Line:"), False, True, 0)
+    self.cmb_text_lalign = Gtk.ComboBoxText()
+    hbox.pack_start(self.cmb_text_lalign, True, True, 0)
     self.cmb_text_lalign.append_text("left")
     self.cmb_text_lalign.append_text("center")
     self.cmb_text_lalign.append_text("right")
 
-    hbox.pack_start(gtk.Label("X-pad:"), False)
-    self.ent_text_xpad = gtk.Entry()
+    hbox.pack_start(Gtk.Label("X-pad:"), False, True, 0)
+    self.ent_text_xpad = Gtk.Entry()
     self.ent_text_xpad.set_size_request(50, -1)
-    hbox.pack_start(self.ent_text_xpad, True)
+    hbox.pack_start(self.ent_text_xpad, True, True, 0)
 
-    hbox.pack_start(gtk.Label("Y-pad:"), False)
-    self.ent_text_ypad = gtk.Entry()
+    hbox.pack_start(Gtk.Label("Y-pad:"), False, True, 0)
+    self.ent_text_ypad = Gtk.Entry()
     self.ent_text_ypad.set_size_request(50, -1)
-    hbox.pack_start(self.ent_text_ypad, True)
+    hbox.pack_start(self.ent_text_ypad, True, True, 0)
 
-    hbox2 = gtk.HBox()
-    vbox.pack_start(hbox2, True)
+    hbox2 = Gtk.HBox()
+    vbox.pack_start(hbox2, True, True, 0)
 
-    self.chk_text_is_cmdline = gtk.CheckButton("Command")
+    self.chk_text_is_cmdline = Gtk.CheckButton("Command")
     self.chk_text_is_cmdline.set_alignment(0, 0)
-    hbox2.pack_start(self.chk_text_is_cmdline, False)
+    hbox2.pack_start(self.chk_text_is_cmdline, False, True, 0)
 
-    self.btn_exec = gtk.Button("Exec")
+    self.btn_exec = Gtk.Button("Exec")
     self.btn_exec.connect("clicked", self.on_exec)
     self.btn_exec.set_sensitive(False)
-    hbox2.pack_start(self.btn_exec, False)
+    hbox2.pack_start(self.btn_exec, False, True, 0)
 
-    self.btn_kill = gtk.Button("Kill")
+    self.btn_kill = Gtk.Button("Kill")
     self.btn_kill.connect("clicked", self.on_kill)
     self.btn_kill.set_sensitive(False)
-    hbox2.pack_start(self.btn_kill, False)
+    hbox2.pack_start(self.btn_kill, False, True, 0)
 
-    self.chk_background = gtk.CheckButton("Shaded Background")
-    hbox2.pack_start(self.chk_background, False)
+    self.chk_background = Gtk.CheckButton("Shaded Background")
+    hbox2.pack_start(self.chk_background, False, True, 0)
 
-    self.btn_update = gtk.Button("Update")
+    self.btn_update = Gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
     self.btn_update.connect("clicked", self.on_update)
-    hbox2.pack_end(self.btn_update, False)
+    hbox2.pack_end(self.btn_update, False, True, 0)
 
-    scroll_text_view = gtk.ScrolledWindow()
-    scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-    self.ent_text = gtk.TextView()
+    scroll_text_view = Gtk.ScrolledWindow()
+    scroll_text_view.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    self.ent_text = Gtk.TextView()
     self.ent_text.set_size_request(-1, 64)
     scroll_text_view.add(self.ent_text)
-    vbox.pack_start(scroll_text_view, True)
+    vbox.pack_start(scroll_text_view, True, True, 0)
 
     return vbox
 
 
   def build_streaming_box(self):
-    hbox = gtk.HBox()
+    hbox = Gtk.HBox()
     hbox.set_spacing(8)
 
-    vbox_left = gtk.VBox()
+    vbox_left = Gtk.VBox()
     vbox_left.set_spacing(8)
-    hbox.pack_start(vbox_left)
+    hbox.pack_start(vbox_left, False, True, 0)
 
-    label1 = gtk.Label("Streaming Command-line")
-    label1.set_justify(gtk.JUSTIFY_LEFT)
+    label1 = Gtk.Label("Streaming Command-line")
+    label1.set_justify(Gtk.JUSTIFY_LEFT)
     label1.set_alignment(0,0)
-    vbox_left.pack_start(label1, False)
+    vbox_left.pack_start(label1, False, True, 0)
 
-    scroll_text_view = gtk.ScrolledWindow()
-    scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-    self.ent_stream_cmdline = gtk.TextView()
+    scroll_text_view = Gtk.ScrolledWindow()
+    scroll_text_view.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+    self.ent_stream_cmdline = Gtk.TextView()
     scroll_text_view.add(self.ent_stream_cmdline)
     vbox_left.pack_start(scroll_text_view)
 
-    vbox_right = gtk.VBox()
+    vbox_right = Gtk.VBox()
     vbox_right.set_spacing(8)
-    hbox.pack_start(vbox_right, False)
+    hbox.pack_start(vbox_right, False, True, 0)
 
-    self.lbl_streamingstatus = gtk.Label()
+    self.lbl_streamingstatus = Gtk.Label()
     self.lbl_streamingstatus.set_text("Streaming is stopped.")
-    vbox_right.pack_end(self.lbl_streamingstatus, False)
-    self.btn_startstop = gtk.ToggleButton("Streaming")
-    vbox_right.pack_end(self.btn_startstop, False)
+    vbox_right.pack_end(self.lbl_streamingstatus, False, True, 0)
+    self.btn_startstop = Gtk.ToggleButton("Streaming")
+    vbox_right.pack_end(self.btn_startstop, False, True, 0)
 
     return hbox
 
 
   def build_menu(self):
     # File
-    menu_quit = gtk.MenuItem(u'Quit')
+    menu_quit = Gtk.MenuItem(u'Quit')
 
-    filemenu = gtk.Menu()
+    filemenu = Gtk.Menu()
     filemenu.append(menu_quit)
 
     # TOP Menu
-    filemenutop = gtk.MenuItem(u'File')
+    filemenutop = Gtk.MenuItem(u'File')
     filemenutop.set_submenu(filemenu)
 
-    menubar = gtk.MenuBar()
+    menubar = Gtk.MenuBar()
     menubar.append(filemenutop)
 
     return menubar
@@ -646,7 +644,7 @@ class WebcamComposerWindow(gtk.Window):
 
   def on_destroy(self, widget, *args):
     print("OnDestroy is called.")
-    gtk.main_quit()
+    Gtk.main_quit()
 
 
   # -- External 
@@ -677,7 +675,7 @@ class WebcamComposerWindow(gtk.Window):
   def getTextViewValue(self, textview):
     buf = textview.get_buffer()
     start, end = buf.get_bounds()
-    text = buf.get_text(start, end)
+    text = buf.get_text(start, end, False)
     return text
 
     
@@ -686,7 +684,7 @@ class WebcamComposerWindow(gtk.Window):
 
 if __name__ == "__main__":
   cm = WebcamComposerWindow()
-  gtk.gdk.threads_init()
-  gtk.main()
+  Gdk.threads_init()
+  Gtk.main()
   saveSetting(SETTING_FILENAME, setting)
 
