@@ -38,12 +38,7 @@ try:
 except ImportError:
   import pickle
 
-from gi.repository import GLib, Gtk, Gdk
-
-import pygst
-pygst.require('0.10')
-import gst
-
+from gi.repository import Gst, GLib, Gtk, GObject
 
 SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
 N_TELOP = 4
@@ -84,11 +79,9 @@ class WebcamComposerSetting(object):
       '_is_cmd' : False,
     } for i in xrange(N_TELOP) ]
 
-
   def merge(self, other):
     if not isinstance(other, WebcamComposerSetting):
       return
-
     for key, value in other.__dict__.iteritems():
       if key == '_version':
         continue
@@ -102,26 +95,20 @@ class WebcamComposerSetting(object):
       else:
         self.__dict__[key] = value
 
+  def save(self, fn):
+    with open(fn, "wb") as f:
+      pickle.dump(self.__dict__, f, -1)
 
-def saveSetting(fn, s):
-  with open(fn, "wb") as f:
-    pickle.dump(s, f, -1)
-
-
-def loadSetting(fn):
-  try:
-    with open(fn, "rb") as f:
-      o = pickle.load(f)
-    if o._version == WebcamComposerSetting.SETTING_LATEST_VERSION:
-      return o
-    n = WebcamComposerSetting()
-    n.merge(o)
-    return n
-  except:
-    pass
-  return None
+  def load(self, fn):
+    try:
+      with open(fn, "rb") as f:
+        o = pickle.load(f)
+      self.merge(o)
+    except:
+      pass
       
-setting = loadSetting(SETTING_FILENAME) or WebcamComposerSetting()
+setting = WebcamComposerSetting()
+setting.load(SETTING_FILENAME)
 
 
 
@@ -140,18 +127,19 @@ class WebcamComposer(object):
     #################
     # Make Elements #
     #################
-    self.player = gst.Pipeline('WebcamComposer')
-    self.camerasource = gst.element_factory_make('v4l2src')
-    capsfilter = gst.element_factory_make('capsfilter')
-    videorate = gst.element_factory_make('videorate')
-    self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
-    self.v4l2sink = gst.element_factory_make('v4l2sink')
-    self.avsink = gst.element_factory_make('xvimagesink')
-    tee = gst.element_factory_make('tee')
-    queue1 = gst.element_factory_make('queue')
-    queue2 = gst.element_factory_make('queue')
-    queue3 = gst.element_factory_make('queue')
-    colorspace = gst.element_factory_make('ffmpegcolorspace')
+    self.player = Gst.Pipeline('WebcamComposer')
+    self.camerasource = Gst.ElementFactory.make('v4l2src', 'Input')
+    capsfilter = Gst.ElementFactory.make('capsfilter', 'capsfilter1')
+    videorate = Gst.ElementFactory.make('videorate', 'videorate')
+    self.telops = [ Gst.ElementFactory.make('textoverlay', 'testoverlay{0}'.format(i)) 
+                    for i in xrange(N_TELOP) ]
+    self.v4l2sink = Gst.ElementFactory.make('v4l2sink', 'Output')
+    self.avsink = Gst.ElementFactory.make('xvimagesink', 'Preview')
+    tee = Gst.ElementFactory.make('tee', 'tee1')
+    queue1 = Gst.ElementFactory.make('queue', 'queue1')
+    queue2 = Gst.ElementFactory.make('queue', 'queue2')
+    queue3 = Gst.ElementFactory.make('queue', 'queue3')
+    colorspace = Gst.ElementFactory.make('ffmpegcolorspace', 'ffmpegcolorspace1')
 
     self.player.add(self.camerasource, videorate, capsfilter,
                     self.v4l2sink, self.avsink, tee, 
@@ -159,9 +147,9 @@ class WebcamComposer(object):
                     *self.telops)
     firstelements = [self.camerasource, queue1, videorate, 
                      capsfilter] + self.telops + [ tee ]
-    gst.element_link_many(*firstelements)
-    gst.element_link_many(tee, queue2, self.v4l2sink)
-    gst.element_link_many(tee, queue3, colorspace, self.avsink)
+    Gst.element_link_many(*firstelements)
+    Gst.element_link_many(tee, queue2, self.v4l2sink)
+    Gst.element_link_many(tee, queue3, colorspace, self.avsink)
 
     ########################
     # Configuring Elements #
@@ -173,7 +161,7 @@ class WebcamComposer(object):
     srccaps = '{0},width={1},height={2},framerate={3}' \
                .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
                        setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
-    capsfilter.set_property('caps', gst.caps_from_string(srccaps))
+    capsfilter.set_property('caps', Gst.caps_from_string(srccaps))
     self.v4l2sink.set_property('device', setting.DST_DEVICE)
 
     for i in xrange(N_TELOP):
@@ -184,7 +172,6 @@ class WebcamComposer(object):
         tp = { "_is_cmd" : False }
 
       telop.set_property("halignment", tp.get("halignment", "left"))
-      print(" ***************** " + tp.get("halignment", "left"))
       telop.set_property("valignment", tp.get("valignment", "top"))  # top, bottom, center
       telop.set_property("line-alignment",  tp.get("line-alignment", "left"))  # left, right
       telop.set_property("xpad", int(tp.get("xpad", 0))) 
@@ -198,7 +185,7 @@ class WebcamComposer(object):
     # Connecting Callbacks #
     ########################
     bus = self.player.get_bus()
-    bus.add_signal_watch()
+    bus.add_signal_watch_full()
     bus.enable_sync_message_emission()
     bus.connect("message", self.on_message)
     bus.connect("sync-message::element", self.on_sync_message)
@@ -231,10 +218,10 @@ class WebcamComposer(object):
   #########
   def on_message(self, bus, message):
     type = message.type
-    if type == gst.MESSAGE_EOS:
-      self.player.set_state(gst.STATE_NULL)
-    elif type == gst.MESSAGE_ERROR:
-      self.player.set_state(gst.STATE_NULL)
+    if type == Gst.MESSAGE_EOS:
+      self.player.set_state(Gst.STATE_NULL)
+    elif type == Gst.MESSAGE_ERROR:
+      self.player.set_state(Gst.STATE_NULL)
       msg = message.parse_error()
       if self.on_err_callback and callable(self.on_err_callback):
         self.on_err_callback(msg)
@@ -259,10 +246,11 @@ class StdoutReader(object):
   SR_READY = 2
   SR_END = 3 
 
-  def __init__(self, cmd_and_args, callback, telop_no):
+  def __init__(self, cmd_and_args, callback, telop_no, encoding=None):
     self.cmd_and_args = cmd_and_args
     self.callback = callback
     self.telop_no = telop_no
+    self.encoding = encoding
     self.child = None
     self._spawn()
 
@@ -272,15 +260,15 @@ class StdoutReader(object):
       self.child = subprocess.Popen(self.cmd_and_args, 
                                     stdout=subprocess.PIPE, 
                                     close_fds=True)
-    except OSError, e:
+    except OSError as e:
       print(e.message)
       return
 
     try:
       GLib.io_add_watch(self.child.stdout, 
-                        GLib.IO_IN | GLib.IO_HUP, 
+                        GLib.IOCondition.IN | GLib.IOCondition.HUP, 
                         self._event)
-    except GLib.GError, e:
+    except GLib.Error as e:
       self.terminate()
       print(e.message)
       return
@@ -290,7 +278,7 @@ class StdoutReader(object):
 
 
   def _event(self, fd, condition):
-    if condition & GLib.IO_IN:
+    if condition & GLib.IOCondition.IN:
       text = []
       while True:
         data = fd.read(1)
@@ -298,21 +286,21 @@ class StdoutReader(object):
           break
         text.append(data)
       text = ''.join(text)
+      if self.encoding:
+        text = text.decode(self.encoding)
       if self.callback:
         self.callback(self.SR_READY, self, text)
 
-    if condition & GLib.IO_HUP:
+    if condition & GLib.IOCondition.HUP:
       self.child.poll()
       if self.callback:
         self.callback(self.SR_END, self, None)
       return False
     return True
 
-
   def terminate(self):
     if self.child:
       self.child.terminate()
-
 
   def is_running(self):
     if self.child:
@@ -323,214 +311,29 @@ class StdoutReader(object):
 
 
 
-class WebcamComposerWindow(Gtk.Window):
+class WebcamComposerWindow(object):
   def __init__(self):
-    Gtk.Window.__init__(self, Gtk.WindowType.TOPLEVEL)
     self.player = None
     self.spawnlist = [None] * N_TELOP
-
     self.build_window()
-    self.set_values()
+    # self.set_values()
 
 
   def build_window(self):
-    self.set_title("Webcam Comporser")
-    self.set_default_size(800, 600)
-    self.connect("delete-event", self.on_delete)
-    self.connect("destroy", self.on_destroy)
+    builder = Gtk.Builder()
+    builder.add_from_file("webcamcomposer.ui")
 
-    vbox_root = Gtk.VBox()
-    self.add(vbox_root)
+    self.mainwindow = builder.get_object("MainWindow")
+    self.mainwindow.connect("delete-event", self.on_delete)
+    self.mainwindow.connect("destroy", self.on_destroy)
 
-    self.menubar = self.build_menu()
-    vbox_root.pack_start(self.menubar, False, True, 0)
+    # self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
+    # self.cmb_text_idx.connect('changed', self.on_cmb_text_idx_changed)
+    # self.btn_exec.connect("clicked", self.on_exec)
+    # self.btn_update.connect("clicked", self.on_update)
+    # self.btn_kill.connect("clicked", self.on_kill)
 
-    vbox_main = Gtk.VBox()
-    vbox_main.set_spacing(8)
-    vbox_root.pack_start(vbox_main, True, True, 0)
-
-    vbox_main.pack_start(self.build_camera_box(), True, True, 0)
-    vbox_main.pack_start(self.build_telop_box(), False, True, 0)
-    # vbox_main.pack_start(self.build_streaming_box(), False)
-
-    self.show_all()
-
-
-  def build_camera_box(self):
-    vbox = Gtk.VBox()
-
-    hbox = Gtk.HBox()
-    hbox.set_spacing(8)
-    vbox.pack_start(hbox, False, True, 0)
-
-    hbox.pack_start(Gtk.Label("Src:"), False, True, 0)
-    self.ent_camera_src = Gtk.Entry()
-    self.ent_camera_src.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_src, False, True, 0)
-
-    hbox.pack_start(Gtk.Label("Fmt:"), False, True, 0)
-    self.ent_camera_fmt = Gtk.Entry()
-    self.ent_camera_fmt.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_fmt, False, True, 0)
-
-    hbox.pack_start(Gtk.Label("Width:"), False, True, 0)
-    self.ent_camera_width = Gtk.Entry()
-    self.ent_camera_width.set_size_request(50, -1)
-    hbox.pack_start(self.ent_camera_width, False, True, 0)
-
-    hbox.pack_start(Gtk.Label("Height:"), False, True, 0)
-    self.ent_camera_height = Gtk.Entry()
-    self.ent_camera_height.set_size_request(50, -1)
-    hbox.pack_start(self.ent_camera_height, False, True, 0)
-
-    hbox.pack_start(Gtk.Label("FPS:"), False, True, 0)
-    self.ent_camera_fps= Gtk.Entry()
-    self.ent_camera_fps.set_size_request(50, -1)
-    hbox.pack_start(self.ent_camera_fps, False, True, 0)
-
-    hbox.pack_start(Gtk.Label("Dst:"), False, True, 0)
-    self.ent_camera_dst= Gtk.Entry()
-    self.ent_camera_dst.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_dst, False, True, 0)
-
-    self.btn_camera_tgl = Gtk.ToggleButton("Camera Off")
-    self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
-    hbox.pack_start(self.btn_camera_tgl, True, True, 0)
-
-    self.movie_window = Gtk.DrawingArea()
-    vbox.pack_start(self.movie_window, True, True, 0)
-
-    return vbox
-
-
-  def build_telop_box(self):
-    vbox = Gtk.VBox()
-    vbox.set_spacing(8)
-
-    hbox = Gtk.HBox()
-    hbox.set_spacing(8)
-    vbox.pack_start(hbox, True, True, 0)
-
-    hbox.pack_start(Gtk.Label("TNO."), False, True, 0)
-    self.cmb_text_idx = Gtk.ComboBoxText()
-    self.cmb_text_idx.connect('changed', self.on_cmb_text_idx_changed)
-    hbox.pack_start(self.cmb_text_idx, True, True, 0)
-    for i in xrange(N_TELOP):
-      self.cmb_text_idx.append_text(str(i))
-
-    hbox.pack_start(Gtk.Label("V:"), False, True, 0)
-    self.cmb_text_valign = Gtk.ComboBoxText()
-    hbox.pack_start(self.cmb_text_valign, True, True, 0)
-    self.cmb_text_valign.append_text("top")
-    self.cmb_text_valign.append_text("center")
-    self.cmb_text_valign.append_text("bottom")
-
-    hbox.pack_start(Gtk.Label("H:"), False, True, 0)
-    self.cmb_text_halign = Gtk.ComboBoxText()
-    hbox.pack_start(self.cmb_text_halign, True, True, 0)
-    self.cmb_text_halign.append_text("left")
-    self.cmb_text_halign.append_text("center")
-    self.cmb_text_halign.append_text("right")
-
-    hbox.pack_start(Gtk.Label("Line:"), False, True, 0)
-    self.cmb_text_lalign = Gtk.ComboBoxText()
-    hbox.pack_start(self.cmb_text_lalign, True, True, 0)
-    self.cmb_text_lalign.append_text("left")
-    self.cmb_text_lalign.append_text("center")
-    self.cmb_text_lalign.append_text("right")
-
-    hbox.pack_start(Gtk.Label("X-pad:"), False, True, 0)
-    self.ent_text_xpad = Gtk.Entry()
-    self.ent_text_xpad.set_size_request(50, -1)
-    hbox.pack_start(self.ent_text_xpad, True, True, 0)
-
-    hbox.pack_start(Gtk.Label("Y-pad:"), False, True, 0)
-    self.ent_text_ypad = Gtk.Entry()
-    self.ent_text_ypad.set_size_request(50, -1)
-    hbox.pack_start(self.ent_text_ypad, True, True, 0)
-
-    hbox2 = Gtk.HBox()
-    vbox.pack_start(hbox2, True, True, 0)
-
-    self.chk_text_is_cmdline = Gtk.CheckButton("Command")
-    self.chk_text_is_cmdline.set_alignment(0, 0)
-    hbox2.pack_start(self.chk_text_is_cmdline, False, True, 0)
-
-    self.btn_exec = Gtk.Button("Exec")
-    self.btn_exec.connect("clicked", self.on_exec)
-    self.btn_exec.set_sensitive(False)
-    hbox2.pack_start(self.btn_exec, False, True, 0)
-
-    self.btn_kill = Gtk.Button("Kill")
-    self.btn_kill.connect("clicked", self.on_kill)
-    self.btn_kill.set_sensitive(False)
-    hbox2.pack_start(self.btn_kill, False, True, 0)
-
-    self.chk_background = Gtk.CheckButton("Shaded Background")
-    hbox2.pack_start(self.chk_background, False, True, 0)
-
-    self.btn_update = Gtk.Button("Update")
-    self.btn_update.set_property("width-request", 200)
-    self.btn_update.connect("clicked", self.on_update)
-    hbox2.pack_end(self.btn_update, False, True, 0)
-
-    scroll_text_view = Gtk.ScrolledWindow()
-    scroll_text_view.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-    self.ent_text = Gtk.TextView()
-    self.ent_text.set_size_request(-1, 64)
-    scroll_text_view.add(self.ent_text)
-    vbox.pack_start(scroll_text_view, True, True, 0)
-
-    return vbox
-
-
-  def build_streaming_box(self):
-    hbox = Gtk.HBox()
-    hbox.set_spacing(8)
-
-    vbox_left = Gtk.VBox()
-    vbox_left.set_spacing(8)
-    hbox.pack_start(vbox_left, False, True, 0)
-
-    label1 = Gtk.Label("Streaming Command-line")
-    label1.set_justify(Gtk.JUSTIFY_LEFT)
-    label1.set_alignment(0,0)
-    vbox_left.pack_start(label1, False, True, 0)
-
-    scroll_text_view = Gtk.ScrolledWindow()
-    scroll_text_view.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-    self.ent_stream_cmdline = Gtk.TextView()
-    scroll_text_view.add(self.ent_stream_cmdline)
-    vbox_left.pack_start(scroll_text_view)
-
-    vbox_right = Gtk.VBox()
-    vbox_right.set_spacing(8)
-    hbox.pack_start(vbox_right, False, True, 0)
-
-    self.lbl_streamingstatus = Gtk.Label()
-    self.lbl_streamingstatus.set_text("Streaming is stopped.")
-    vbox_right.pack_end(self.lbl_streamingstatus, False, True, 0)
-    self.btn_startstop = Gtk.ToggleButton("Streaming")
-    vbox_right.pack_end(self.btn_startstop, False, True, 0)
-
-    return hbox
-
-
-  def build_menu(self):
-    # File
-    menu_quit = Gtk.MenuItem(u'Quit')
-
-    filemenu = Gtk.Menu()
-    filemenu.append(menu_quit)
-
-    # TOP Menu
-    filemenutop = Gtk.MenuItem(u'File')
-    filemenutop.set_submenu(filemenu)
-
-    menubar = Gtk.MenuBar()
-    menubar.append(filemenutop)
-
-    return menubar
+    self.mainwindow.show_all()
 
 
   def set_values(self):
@@ -612,14 +415,14 @@ class WebcamComposerWindow(Gtk.Window):
 
       self.player = WebcamComposer(prev_panel=self.movie_window, 
                                    on_err_callback=self.on_cc_error)
-      self.player.set_state(gst.STATE_PAUSED)
-      self.player.set_state(gst.STATE_PLAYING)
+      self.player.set_state(Gst.STATE_PAUSED)
+      self.player.set_state(Gst.STATE_PLAYING)
       self.btn_camera_tgl.set_label("Camera Off")
     else:
       for spawn in self.spawnlist:
         if spawn and spawn.is_running():
           spawn.terminate()
-      self.player.set_state(gst.STATE_NULL)
+      self.player.set_state(Gst.STATE_NULL)
       self.player = None
       self.btn_camera_tgl.set_label("Camera On")
 
@@ -638,7 +441,7 @@ class WebcamComposerWindow(Gtk.Window):
   def on_delete(self, widget, *args):
     print("OnDelete is called.")
     if self.player:
-      self.player.set_state(gst.STATE_NULL)
+      self.player.set_state(Gst.STATE_NULL)
     return False 
 
 
@@ -653,7 +456,7 @@ class WebcamComposerWindow(Gtk.Window):
     """ WebcamComposer Error Callback """
     print("{0}:{1}".format(*message), file=sys.stderr)
     if self.player:
-      self.player.set_state(gst.STATE_NULL)
+      self.player.set_state(Gst.STATE_NULL)
     self.btn_camera_tgl.set_active(False)
     self.btn_camera_tgl.set_label("Camera Off")
 
@@ -680,11 +483,11 @@ class WebcamComposerWindow(Gtk.Window):
 
     
 
-
-
 if __name__ == "__main__":
+  GObject.threads_init()
+  Gst.init_check(None)
   cm = WebcamComposerWindow()
-  Gdk.threads_init()
+  #Gdk.threads_init()
   Gtk.main()
-  saveSetting(SETTING_FILENAME, setting)
+  settings.save(SETTING_FILENAME)
 
