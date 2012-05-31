@@ -224,7 +224,7 @@ class WebcamComposer(object):
     except IndexError:
       return 
     for name, value in propdict.iteritems():
-      if name in self.ALLOW_TELOP_PROP_NAME:
+      if name in self.ALLOW_TELOP_PROP_NAME and value:
         telop.set_property(name, value)
 
 
@@ -591,16 +591,19 @@ class WebcamComposerWindow(gtk.Window):
     no = self.cmb_text_idx.get_active()
     if no < 0:
       return 
+
     try:
-      setting.TELOP_PROPERTIES[no] = properties
+      setting.TELOP_PROPERTIES[no] = properties.copy()
     except IndexError:
       return
 
     if self.player:
-      self.player.set_telop_property(no, properties)
       if properties['_is_cmd']:
-        cmdline = shlex.split(properties['text'])
-        self.spawnlist[no] = StdoutReader(cmdline, self.on_read_from_stdout, no)
+        if self.spawnlist[no] is None or not self.spawnlist[no].is_running():
+          cmdline = shlex.split(properties['text'])
+          self.spawnlist[no] = StdoutReader(cmdline, self.on_read_from_stdout, no)
+        properties['text'] = None
+      self.player.set_telop_property(no, properties)
 
 
   def on_camera_startstop(self, widget):
