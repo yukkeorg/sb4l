@@ -3,6 +3,6 @@ BROADCASTER="niconama"
 
 VIDEO_SRC_DEV="/dev/video1"
 VIDEO_SRC_FMT="video4linux2"
-AUDIO_SRC_DEV="pulse"
-AUDIO_SRC_FMT="alsa"
+AUDIO_SRC_DEV="default"
+AUDIO_SRC_FMT="pulse"
 
