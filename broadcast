@@ -41,7 +41,7 @@ fi
 
 # --- Muxing video/audio and sending stream to server with ffmpeg.
 exec ffmpeg -y -threads 4 \
-       -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} -bt ${VBITRATE}k \
+       -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
            -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
        ${VCODEC_OPTS} ${ACODEC_OPTS} ${OUTPUT_OPTS} \

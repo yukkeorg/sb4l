@@ -1,25 +1,16 @@
-VBITRATE="240"
+VBITRATE="260"
 FPS="30"
 
 ASAMPLINGRATE="44100"
 ABITRATE="96"
 ACHANNEL="2"
-
-#RATECTRL="-crf 15"
-RATECTRL="-b:v ${VBITRATE}k"
-
 VCODEC_OPTS="-vcodec libx264 -preset fast 
              -partitions i4x4,p8x8,p4x4,b8x8,i8x8 
              -flags +loop 
-             -deblock 0:0 ${RATECTRL}
-             -refs 4 
-             -bf 16 
-             -b_strategy 1  
-             -b-pyramid 1 -wpredp 1 -mixed-refs 1 -mbtree 1 -fast-pskip 1 
-             -cmp +chroma 
+             -crf 26
+             -maxrate ${VBITRATE}k -bufsize $((${VBITRATE} * 3 / 2))k
              -qmin 10 -qmax 51 
-             -keyint_min ${FPS}
-             -g $((${FPS}*10))"
+             -keyint_min 0"
 
 ACODEC_OPTS="-acodec libfaac"
 OUTPUT_OPTS="-f flv -s 512x384"
