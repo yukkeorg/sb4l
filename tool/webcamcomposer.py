@@ -65,7 +65,7 @@ _CCS_VALIGN = {
 
 
 class WebcamComposerSetting(object):
-  SETTING_LATEST_VERSION = '0.1'
+  SETTING_LATEST_VERSION = '0.2'
 
   def __init__(self):
     self._version = self.SETTING_LATEST_VERSION
@@ -83,6 +83,7 @@ class WebcamComposerSetting(object):
       'line-alignment' : 'left',   # left, right, center
       'xpad' : '0',
       'ypad' : '0',
+      'font-desc' : '',
       'text' : '',
       '_is_cmd' : False,
     } for i in xrange(N_TELOP) ]
@@ -132,7 +133,7 @@ setting = loadSetting(SETTING_FILENAME) or WebcamComposerSetting()
 class WebcamComposer(object):
   ALLOW_TELOP_PROP_NAME = ("halignment", "valignment", 
                            "line-alignment", "xpad", "ypad", 
-                           "text", "shaded-background")
+                           "text")
 
   def __init__(self, prev_panel=None, on_err_callback=None):
     self.prev_panel = prev_panel
@@ -149,7 +150,7 @@ class WebcamComposer(object):
     videorate = gst.element_factory_make('videorate')
     self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
-    self.avsink = gst.element_factory_make('xvimagesink')
+    self.monitorsink= gst.element_factory_make('xvimagesink')
     tee = gst.element_factory_make('tee')
     queue1 = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
@@ -157,14 +158,14 @@ class WebcamComposer(object):
     colorspace = gst.element_factory_make('ffmpegcolorspace')
 
     self.player.add(self.camerasource, videorate, capsfilter,
-                    self.v4l2sink, self.avsink, tee, 
+                    self.v4l2sink, self.monitorsink, tee, 
                     queue1, queue2, queue3, colorspace,
                     *self.telops)
-    firstelements = [self.camerasource, queue1, videorate, 
-                     capsfilter] + self.telops + [ tee ]
-    gst.element_link_many(*firstelements)
+
+    gst.element_link_many(*([self.camerasource, videorate, capsfilter,
+                           queue1] + self.telops + [ tee ]))
     gst.element_link_many(tee, queue2, self.v4l2sink)
-    gst.element_link_many(tee, queue3, colorspace, self.avsink)
+    gst.element_link_many(tee, queue3, colorspace, self.monitorsink)
 
     ########################
     # Configuring Elements #
@@ -274,7 +275,7 @@ class StdoutReader(object):
       self.child = subprocess.Popen(self.cmd_and_args, 
                                     stdout=subprocess.PIPE, 
                                     close_fds=True)
-    except OSError, e:
+    except OSError as e:
       print(e.message)
       return
 
@@ -282,7 +283,7 @@ class StdoutReader(object):
       glib.io_add_watch(self.child.stdout, 
                         glib.IO_IN | glib.IO_HUP, 
                         self._event)
-    except glib.GError, e:
+    except glib.GError as e:
       self.terminate()
       print(e.message)
       return
@@ -317,10 +318,9 @@ class StdoutReader(object):
 
 
   def is_running(self):
-    if self.child:
-      return (self.child.returncode is None)
-    else:
+    if not self.child:
       return False
+    return (self.child.returncode is None)
 
 
 
@@ -386,12 +386,12 @@ class WebcamComposerWindow(gtk.Window):
     hbox.pack_start(self.ent_camera_height, False)
 
     hbox.pack_start(gtk.Label("FPS:"), False)
-    self.ent_camera_fps= gtk.Entry()
+    self.ent_camera_fps = gtk.Entry()
     self.ent_camera_fps.set_size_request(50, -1)
     hbox.pack_start(self.ent_camera_fps, False)
 
     hbox.pack_start(gtk.Label("Dst:"), False)
-    self.ent_camera_dst= gtk.Entry()
+    self.ent_camera_dst = gtk.Entry()
     self.ent_camera_dst.set_size_request(100, -1)
     hbox.pack_start(self.ent_camera_dst, False)
 
@@ -453,6 +453,7 @@ class WebcamComposerWindow(gtk.Window):
 
     hbox2 = gtk.HBox()
     vbox.pack_start(hbox2, True)
+    vbox.set_spacing(8)
 
     self.chk_text_is_cmdline = gtk.CheckButton("Command")
     self.chk_text_is_cmdline.set_alignment(0, 0)
@@ -468,8 +469,14 @@ class WebcamComposerWindow(gtk.Window):
     self.btn_kill.set_sensitive(False)
     hbox2.pack_start(self.btn_kill, False)
 
-    self.chk_background = gtk.CheckButton("Shaded Background")
-    hbox2.pack_start(self.chk_background, False)
+    # self.chk_background = gtk.CheckButton("Shaded Background")
+    # hbox2.pack_start(self.chk_background, False)
+
+    hbox2.pack_start(gtk.Label("Display Font:"), False)
+    self.fontselector = gtk.FontButton();
+    self.fontselector.connect("font-set", self.on_font_set)
+    hbox2.pack_start(self.fontselector, False)
+
 
     self.btn_update = gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
@@ -549,7 +556,7 @@ class WebcamComposerWindow(gtk.Window):
   #  Callbacks  #
   ###############
 
-  # -- Internal 
+  # -- Callback for events
 
   def on_cmb_text_idx_changed(self, widget):
     idx = widget.get_active()
@@ -568,12 +575,13 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_text_ypad.set_text(str(properties.get('ypad', 0)))
     is_cmd = properties.get('_is_cmd', False)
     self.chk_text_is_cmdline.set_active(is_cmd)
+    self.fontselector.set_font_name(properties.get('font-desc', ''))
     self.btn_kill.set_sensitive(False)
     if is_cmd:
       spawn = self.spawnlist[idx]
       if spawn and spawn.is_running():
         self.btn_kill.set_sensitive(True)
-    self.chk_background.set_active(1 if properties.get('shaded-background', False) else 0)
+    # self.chk_background.set_active(1 if properties.get('shaded-background', False) else 0)
     self.ent_text.get_buffer().set_text(properties.get('text', ''))
 
 
@@ -585,7 +593,8 @@ class WebcamComposerWindow(gtk.Window):
     properties['xpad'] = int(self.ent_text_xpad.get_text())
     properties['ypad'] = int(self.ent_text_ypad.get_text())
     properties['_is_cmd'] = self.chk_text_is_cmdline.get_active()
-    properties['shaded-background'] = 1 if self.chk_background.get_active() else 0
+    # properties['shaded-background'] = 1 if self.chk_background.get_active() else 0
+    properties['font-desc'] = self.fontselector.get_font_name()
     properties['text'] = self.getTextViewValue(self.ent_text)
 
     no = self.cmb_text_idx.get_active()
@@ -603,6 +612,9 @@ class WebcamComposerWindow(gtk.Window):
           cmdline = shlex.split(properties['text'])
           self.spawnlist[no] = StdoutReader(cmdline, self.on_read_from_stdout, no)
         properties['text'] = None
+      else:
+        properties['text'] = self.decolateDisplayFont(no, properties['text'])
+      print(properties['text'])
       self.player.set_telop_property(no, properties)
 
 
@@ -652,6 +664,12 @@ class WebcamComposerWindow(gtk.Window):
     gtk.main_quit()
 
 
+  def on_font_set(self, widget):
+    font_name = widget.get_font_name()
+    print("Set font is '{0}'.".format(font_name))
+    return True
+
+
   # -- External 
 
   def on_cc_error(self, message): 
@@ -667,6 +685,7 @@ class WebcamComposerWindow(gtk.Window):
     """ StdoutReader read data from stdout callback """
     if msgtype == StdoutReader.SR_READY:
       if self.player:
+        text = self.decolateDisplayFont(sr.telop_no, text)
         self.player.set_telop_text(sr.telop_no, text)
     elif msgtype == StdoutReader.SR_START:
       self.btn_kill.set_sensitive(True)
@@ -683,9 +702,14 @@ class WebcamComposerWindow(gtk.Window):
     text = buf.get_text(start, end)
     return text
 
-    
-
-
+  def decolateDisplayFont(self, no, text):
+    try:
+      p = setting.TELOP_PROPERTIES[no]
+    except IndexError:
+      p = None
+    if p and 'font-desc' in p and p['font-desc'] != '':
+      text = '<span font="{0}">{1}</span>'.format(p['font-desc'], text)
+    return text
 
 if __name__ == "__main__":
   cm = WebcamComposerWindow()
