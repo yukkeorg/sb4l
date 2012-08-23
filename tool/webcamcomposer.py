@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Copyright (c) 2011, Yusuke Ohshima
+# Copyright (c) 2011-2012, Yusuke Ohshima
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without modification, 
@@ -65,7 +65,7 @@ _CCS_VALIGN = {
 
 
 class WebcamComposerSetting(object):
-  SETTING_LATEST_VERSION = '0.2'
+  SETTING_LATEST_VERSION = '0.3'
 
   def __init__(self):
     self._version = self.SETTING_LATEST_VERSION
@@ -87,6 +87,8 @@ class WebcamComposerSetting(object):
       'text' : '',
       '_is_cmd' : False,
     } for i in xrange(N_TELOP) ]
+
+    self.FRAME_SVG_FILE = ''
 
 
   def merge(self, other):
@@ -148,6 +150,7 @@ class WebcamComposer(object):
     self.camerasource = gst.element_factory_make('v4l2src')
     capsfilter = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
+    self.framesvg = gst.element_factory_make('rsvgoverlay')
     self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.monitorsink= gst.element_factory_make('xvimagesink')
@@ -155,17 +158,20 @@ class WebcamComposer(object):
     queue1 = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
     queue3 = gst.element_factory_make('queue')
-    colorspace = gst.element_factory_make('ffmpegcolorspace')
+    colorspace1 = gst.element_factory_make('ffmpegcolorspace')
+    colorspace2 = gst.element_factory_make('ffmpegcolorspace')
+    colorspace3 = gst.element_factory_make('ffmpegcolorspace')
 
     self.player.add(self.camerasource, videorate, capsfilter,
-                    self.v4l2sink, self.monitorsink, tee, 
-                    queue1, queue2, queue3, colorspace,
-                    *self.telops)
+                    self.v4l2sink, self.monitorsink, self.framesvg, tee, 
+                    queue2, queue3, colorspace1, colorspace2,
+                    colorspace3, *self.telops)
 
     gst.element_link_many(*([self.camerasource, videorate, capsfilter,
-                           queue1] + self.telops + [ tee ]))
-    gst.element_link_many(tee, queue2, self.v4l2sink)
-    gst.element_link_many(tee, queue3, colorspace, self.monitorsink)
+                             colorspace1, self.framesvg ] 
+                            + self.telops + [ tee ]))
+    gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
+    gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
 
     ########################
     # Configuring Elements #
@@ -197,6 +203,8 @@ class WebcamComposer(object):
       else:
         telop.set_property("text", tp.get("text", ""))
 
+    self.framesvg.set_property("location", setting.FRAME_SVG_FILE)
+
     ########################
     # Connecting Callbacks #
     ########################
@@ -227,6 +235,9 @@ class WebcamComposer(object):
     for name, value in propdict.iteritems():
       if name in self.ALLOW_TELOP_PROP_NAME and value:
         telop.set_property(name, value)
+
+  def set_framesvg_file(self, filepath):
+    self.framesvg.set_property("location", filepath)
 
 
   #########
@@ -352,6 +363,7 @@ class WebcamComposerWindow(gtk.Window):
     vbox_root.pack_start(vbox_main, True)
 
     vbox_main.pack_start(self.build_camera_box(), True)
+    vbox_main.pack_start(self.build_frame_box(), False)
     vbox_main.pack_start(self.build_telop_box(), False)
     # vbox_main.pack_start(self.build_streaming_box(), False)
 
@@ -404,6 +416,21 @@ class WebcamComposerWindow(gtk.Window):
 
     return vbox
 
+
+  def build_frame_box(self):
+    vbox = gtk.VBox()
+
+    hbox = gtk.HBox()
+    hbox.set_spacing(8)
+    vbox.pack_start(hbox, False)
+
+    hbox.pack_start(gtk.Label("Frame SVG :"), False)
+    self.setframe_btn = gtk.FileChooserButton("Set Frame from SVG")
+    self.setframe_btn.connect("file-set", self.on_setframe_fileset)
+    hbox.pack_start(self.setframe_btn, True)
+
+    return vbox
+    
 
   def build_telop_box(self):
     vbox = gtk.VBox()
@@ -550,6 +577,8 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_camera_fps.set_text(setting.SRC_FRAMERATE)
     self.ent_camera_dst.set_text(setting.DST_DEVICE)
 
+    self.setframe_btn.set_filename(setting.FRAME_SVG_FILE)
+
     self.cmb_text_idx.set_active(0)
 
   ###############
@@ -668,6 +697,14 @@ class WebcamComposerWindow(gtk.Window):
     font_name = widget.get_font_name()
     print("Set font is '{0}'.".format(font_name))
     return True
+
+  def on_setframe_fileset(self, widget, *args):
+    filepath = widget.get_filename()
+    if self.player:
+      self.player.set_framesvg_file(filepath)
+    setting.FRAME_SVG_FILE = filepath
+    print(filepath)
+    
 
 
   # -- External 
