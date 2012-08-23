@@ -149,26 +149,30 @@ class WebcamComposer(object):
     self.player = gst.Pipeline('WebcamComposer')
     self.camerasource = gst.element_factory_make('v4l2src')
     capsfilter = gst.element_factory_make('capsfilter')
+    capsfilter2 = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
+    videorate2 = gst.element_factory_make('videorate')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
     self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.monitorsink= gst.element_factory_make('xvimagesink')
     tee = gst.element_factory_make('tee')
-    queue1 = gst.element_factory_make('queue')
+    queue = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
     queue3 = gst.element_factory_make('queue')
     colorspace1 = gst.element_factory_make('ffmpegcolorspace')
     colorspace2 = gst.element_factory_make('ffmpegcolorspace')
     colorspace3 = gst.element_factory_make('ffmpegcolorspace')
 
-    self.player.add(self.camerasource, videorate, capsfilter,
-                    self.v4l2sink, self.monitorsink, self.framesvg, tee, 
-                    queue2, queue3, colorspace1, colorspace2,
-                    colorspace3, *self.telops)
+    self.player.add(self.camerasource, self.v4l2sink, self.monitorsink, self.framesvg,
+                    videorate, videorate2, capsfilter, capsfilter2,
+                    tee, 
+                    queue, queue2, queue3, 
+                    colorspace1, colorspace2, colorspace3, 
+                    *self.telops)
 
-    gst.element_link_many(*([self.camerasource, videorate, capsfilter,
-                             colorspace1, self.framesvg ] 
+    gst.element_link_many(*([self.camerasource, capsfilter, queue, videorate, 
+                             capsfilter2, colorspace1, self.framesvg ] 
                             + self.telops + [ tee ]))
     gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
     gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
@@ -184,8 +188,12 @@ class WebcamComposer(object):
                .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
                        setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
+    capsfilter2.set_property('caps', gst.caps_from_string(srccaps))
+
+    # v4l2sink
     self.v4l2sink.set_property('device', setting.DST_DEVICE)
 
+    # textoverlay
     for i in xrange(N_TELOP):
       telop = self.telops[i]
       try:
@@ -203,6 +211,7 @@ class WebcamComposer(object):
       else:
         telop.set_property("text", tp.get("text", ""))
 
+    # rsvgoverlay
     self.framesvg.set_property("location", setting.FRAME_SVG_FILE)
 
     ########################
