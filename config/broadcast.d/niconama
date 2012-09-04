@@ -7,9 +7,6 @@ else
 fi
 FPS="30"
 
-ASAMPLINGRATE="44100"
-ABITRATE="96"
-ACHANNEL="2"
 VCODEC_OPTS="-vcodec libx264 -preset slow
              -partitions i4x4,p8x8,p4x4,b8x8,i8x8 
              -flags +loop 
@@ -18,5 +15,9 @@ VCODEC_OPTS="-vcodec libx264 -preset slow
              -qmin 10 -qmax 51 
              -keyint_min 0"
 
-ACODEC_OPTS="-acodec libfaac"
+ASAMPLINGRATE="44100"
+ABITRATE="96"
+ACHANNEL="2"
+ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
+
 OUTPUT_OPTS="-f flv -s 512x384"

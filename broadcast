@@ -13,18 +13,9 @@ SOURCEDIR=$(dirname "$0")
 RTMP_URI="$1"
 STREAM="$2"
 
-if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
-  if [ "${RTMP_URI}x" = "localx" ]; then
-    OUTPUT_URI=test.flv
-  else
-    echo "Please specified RTMP_URI and STREAM."
-    exit 1
-  fi
-fi
+FFMPEG=/usr/local/bin/ffmpeg
+#FFMPEG=${SOURCEDIR}/ffmpeg
 
-if [ "${OUTPUT_URI}x" = "x" ]; then
-  OUTPUT_URI="${RTMP_URI}/${STREAM} flashVer=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${STREAM}"
-fi
 
 if [ -e ${SOURCEDIR}/config/global ]; then  
   . ${SOURCEDIR}/config/global || exit 1
@@ -39,8 +30,23 @@ else
   exit 2
 fi
 
+
+if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
+  if [ "${RTMP_URI}x" = "localx" ]; then
+    OUTPUT_URI=test.flv
+  else
+    echo "Please specified RTMP_URI and STREAM."
+    exit 1
+  fi
+fi
+if [ "${OUTPUT_URI}x" = "x" ]; then
+#  OUTPUT_URI="${RTMP_URI}/${STREAM} flashVer=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
+  # OUTPUT_URI="${RTMP_URI}/${STREAM} swfUrl=${RTMP_URI}"
+  OUTPUT_URI="${RTMP_URI}/${STREAM}"
+fi
+
 # --- Muxing video/audio and sending stream to server with ffmpeg.
-exec ffmpeg -y -threads 4 \
+exec ${FFMPEG} -debug 2 -y -threads 0 \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
            -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
