@@ -3,7 +3,7 @@ NOWTIME=$(date +%-H%M)
 if [ "200" -le "$NOWTIME" -a "$NOWTIME" -le "1930" ]; then
   VBITRATE="380"
 else
-  VBITRATE="280"
+  VBITRATE="270"
 fi
 FPS="30"
 

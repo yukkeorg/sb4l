@@ -13,10 +13,7 @@ SOURCEDIR=$(dirname "$0")
 RTMP_URI="$1"
 STREAM="$2"
 
-FFMPEG=/usr/local/bin/ffmpeg
-#FFMPEG=${SOURCEDIR}/ffmpeg
-
-
+# --- Load config files
 if [ -e ${SOURCEDIR}/config/global ]; then  
   . ${SOURCEDIR}/config/global || exit 1
 else
@@ -30,10 +27,10 @@ else
   exit 2
 fi
 
-
+# --- Adjust parameter
 if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
   if [ "${RTMP_URI}x" = "localx" ]; then
-    OUTPUT_URI=test.flv
+    OUTPUT_URI="${SOURCEDIR}/test.flv"
   else
     echo "Please specified RTMP_URI and STREAM."
     exit 1
@@ -46,10 +43,10 @@ if [ "${OUTPUT_URI}x" = "x" ]; then
 fi
 
 # --- Muxing video/audio and sending stream to server with ffmpeg.
-exec ${FFMPEG} -debug 2 -y -threads 0 \
+exec ${FFMPEG} ${FFMPEGDEBUG} -y -threads ${FFMPEGTHREADS} \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
-           -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL} \
-       ${VCODEC_OPTS} ${ACODEC_OPTS} ${OUTPUT_OPTS} \
-       "${OUTPUT_URI}"
+       ${VCODEC_OPTS} \
+       ${ACODEC_OPTS} \
+       ${OUTPUT_OPTS} "${OUTPUT_URI}"
 
