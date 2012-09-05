@@ -152,6 +152,7 @@ class WebcamComposer(object):
     capsfilter2 = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
     videorate2 = gst.element_factory_make('videorate')
+    jpegdec = gst.element_factory_make('jpegdec')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
     self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
@@ -165,14 +166,14 @@ class WebcamComposer(object):
     colorspace3 = gst.element_factory_make('ffmpegcolorspace')
 
     self.player.add(self.camerasource, self.v4l2sink, self.monitorsink, self.framesvg,
-                    videorate, videorate2, capsfilter, capsfilter2,
+                    videorate, videorate2, capsfilter, capsfilter2, jpegdec,
                     tee, 
                     queue, queue2, queue3, 
                     colorspace1, colorspace2, colorspace3, 
                     *self.telops)
 
-    gst.element_link_many(*([self.camerasource, capsfilter, queue, videorate, 
-                             capsfilter2, colorspace1, self.framesvg ] 
+    gst.element_link_many(*([self.camerasource, capsfilter, queue, jpegdec, 
+                             colorspace1, self.framesvg ] 
                             + self.telops + [ tee ]))
     gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
     gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
@@ -183,15 +184,20 @@ class WebcamComposer(object):
     # v4l2src property
     self.camerasource.set_property('device', setting.SRC_DEVICE)
     self.camerasource.set_property('blocksize', 65536)
+
     # caps property
-    srccaps = '{0},width={1},height={2},framerate={3}' \
-               .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
+    #srccaps = '{0},width={1},height={2},framerate={3}' \
+    #           .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
+    #                   setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
+    srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
+               .format(setting.SRC_WIDTH, 
                        setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
-    capsfilter2.set_property('caps', gst.caps_from_string(srccaps))
+    #capsfilter2.set_property('caps', gst.caps_from_string(srccaps))
 
     # v4l2sink
     self.v4l2sink.set_property('device', setting.DST_DEVICE)
+    self.v4l2sink.set_property('sync', False)
 
     # textoverlay
     for i in xrange(N_TELOP):
@@ -213,6 +219,9 @@ class WebcamComposer(object):
 
     # rsvgoverlay
     self.framesvg.set_property("location", setting.FRAME_SVG_FILE)
+
+    #
+    self.monitorsink.set_property("sync", False)
 
     ########################
     # Connecting Callbacks #
