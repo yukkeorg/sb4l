@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# broadcast.sh
-# ============
-# This is script which broadcast with a webcam  
+# broadcast
+# =========
+# This is script which broadcast with ffmpeg.
 # Sorry, this is for Linix only.
 # 
 # Required extra tools:
@@ -23,30 +23,28 @@ fi
 if [ -e ${SOURCEDIR}/config/broadcast.d/${BROADCASTER} ]; then
   . ${SOURCEDIR}/config/broadcast.d/${BROADCASTER}
 else
-  echo "Can't open config/broadcast.d/${BROADCASTER}" >2
+  echo "Can't open config/broadcast.d/${BeOADCASTER}" >2
   exit 2
 fi
 
 # --- Adjust parameter
-if [ "${RTMP_URI}x" = "x" -o "${STREAM}x" = "x" ]; then
-  if [ "${RTMP_URI}x" = "localx" ]; then
-    OUTPUT_URI="${SOURCEDIR}/test.flv"
-  else
+if [ "${RTMP_URI}" = "test" ]; then
+  FULL_OUTPUT_URI="${SOURCEDIR}/test.flv"
+else
+  if [ -z "${STREAM}" ]; then 
     echo "Please specified RTMP_URI and STREAM."
-    exit 1
+    exit 3
   fi
-fi
-if [ "${OUTPUT_URI}x" = "x" ]; then
-#  OUTPUT_URI="${RTMP_URI}/${STREAM} flashVer=FME/3.0\20(compatible;\20FMSc/1.0) swfUrl=${RTMP_URI}"
-  # OUTPUT_URI="${RTMP_URI}/${STREAM} swfUrl=${RTMP_URI}"
   OUTPUT_URI="${RTMP_URI}/${STREAM}"
+  RTMPPARAMS=$(echo "$RTMPPARAMS" | sed -e "s#@@RTMPURI@@#${OUTPUT_URI}#g")
+  FULL_OUTPUT_URI="${OUTPUT_URI} ${RTMPPARAMS}"
 fi
 
-# --- Muxing video/audio and sending stream to server with ffmpeg.
+# --- Muxing video/audio and streaming to server.
 exec ${FFMPEG} ${FFMPEGDEBUG} -y -threads ${FFMPEGTHREADS} \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
        ${VCODEC_OPTS} \
        ${ACODEC_OPTS} \
-       ${OUTPUT_OPTS} "${OUTPUT_URI}"
+       ${OUTPUT_OPTS} "${FULL_OUTPUT_URI}"
 

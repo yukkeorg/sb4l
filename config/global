@@ -1,4 +1,6 @@
 CAMERANAME="C920"
+CAMERADEVICE="/dev/video0"
+
 BROADCASTER="niconama"
 
 # FFMPEG=${SOURCEDIR}/ffmpeg

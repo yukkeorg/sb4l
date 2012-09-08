@@ -1,3 +1,7 @@
+# FOR Niconama
+
+# Output H.264 Video Codec Parameters
+# ===================================
 # Service time
 NOWTIME=$(date +%-H%M)
 if [ "200" -le "$NOWTIME" -a "$NOWTIME" -le "1930" ]; then
@@ -5,21 +9,30 @@ if [ "200" -le "$NOWTIME" -a "$NOWTIME" -le "1930" ]; then
 else
   VBITRATE="270"
 fi
-FPS="30"
 
 VCODEC_OPTS="-vcodec libx264 -preset slow
              -partitions i4x4,p8x8,p4x4,b8x8,i8x8 
              -flags +loop 
              -crf 26
-             -maxrate ${VBITRATE}k -bufsize $((${VBITRATE} * 3))k
+             -maxrate ${VBITRATE}k -bufsize $((${VBITRATE} * 2))k
              -qmin 10 -qmax 51 
              -keyint_min 0"
 
+# Output AAC Audio Codec Parameters
+# =================================
 ASAMPLINGRATE="44100"
 ABITRATE="96"
 ACHANNEL="2"
 ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
 
-# ニコ生で配信する場合は出力ピクセルフォーマットをyuv420pにすること。
-# yuv422などのピクセルフォーマットは対応していないため。
+# Output FLV Container Parameters
+# ===============================
+# ニコ生で配信する場合はピクセルフォーマットをyuv420pにすること。
+# yuv422などのピクセルフォーマットは対応していないため、配信開始から
+# 10秒ぐらいでサーバ側からコネクションを切断される。
 OUTPUT_OPTS="-f flv -pix_fmt yuv420p -s 512x384"
+
+# Output RTMP Communication Protocol Parameters
+# =============================================
+RTMPPARAMS=""
+#RTMPPARAMS="flashVer=FME/3.0 swfUrl=@@RTMPURI@@"
