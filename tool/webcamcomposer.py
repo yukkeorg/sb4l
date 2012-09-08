@@ -186,14 +186,10 @@ class WebcamComposer(object):
     self.camerasource.set_property('blocksize', 65536)
 
     # caps property
-    #srccaps = '{0},width={1},height={2},framerate={3}' \
-    #           .format(setting.SRC_FORMAT, setting.SRC_WIDTH, 
-    #                   setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
     srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
                .format(setting.SRC_WIDTH, 
                        setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
-    #capsfilter2.set_property('caps', gst.caps_from_string(srccaps))
 
     # v4l2sink
     self.v4l2sink.set_property('device', setting.DST_DEVICE)
