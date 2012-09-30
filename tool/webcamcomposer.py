@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# Copyright (c) 2011-2012, Yusuke Ohshima
+# Copyright (c) 2011-2012, Yusuke Ohshima <createtool@yukke.org>
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without modification, 
@@ -64,72 +64,51 @@ _CCS_VALIGN = {
 }
 
 
+class TelopSetting(object):
+  def __init__(self, 
+               valignment=None, halignment=None, linealignment=None,
+               xpad=None, ypad=None, fontdesc=None, text=None,
+               is_cmd=False, **kw):
+      self.valignment = valignment or 'top'
+      self.halignment = halignment or 'left'
+      self.linealignment = linealignment or 'left'
+      self.xpad = xpad or '0'
+      self.ypad = ypad or '0'
+      self.fontdesc = fontdesc or ''
+      self.text = text or ''
+      self.is_cmd = is_cmd or False
+
+
 class WebcamComposerSetting(object):
   SETTING_LATEST_VERSION = '0.3'
 
   def __init__(self):
     self._version = self.SETTING_LATEST_VERSION
 
-    self.SRC_DEVICE = '/dev/video0'
-    self.SRC_FORMAT = 'video/x-raw-yuv'
-    self.SRC_WIDTH = '640'
-    self.SRC_HEIGHT = '480'
-    self.SRC_FRAMERATE = '30/1'
-    self.DST_DEVICE = '/dev/video1'
+    self.source_device = '/dev/video0'
+    self.source_format = 'video/x-raw-yuv'
+    self.source_width = '640'
+    self.source_height = '480'
+    self.source_framerate = '30/1'
+    self.sink_device = '/dev/video1'
+    self.telops = [ TelopSetting() for i in xrange(N_TELOP) ]
+    self.frame_svgfile = ''
 
-    self.TELOP_PROPERTIES = [ {
-      'valignment' : 'top',        # top, bottom, center
-      'halignment' : 'left',       # left, right, center
-      'line-alignment' : 'left',   # left, right, center
-      'xpad' : '0',
-      'ypad' : '0',
-      'font-desc' : '',
-      'text' : '',
-      '_is_cmd' : False,
-    } for i in xrange(N_TELOP) ]
+  def Save(self, filename):
+    with open(filename, "wb") as f:
+      pickle.dump(self, f, -1)
 
-    self.FRAME_SVG_FILE = ''
-
-
-  def merge(self, other):
-    if not isinstance(other, WebcamComposerSetting):
-      return
-
-    for key, value in other.__dict__.iteritems():
-      if key == '_version':
-        continue
-      if key in self.__dict__:
-        if isinstance(value, (list, tuple)):
-          self.__dict__[key][:len(value)] = value
-        elif isinstance(value, dict):
-          self.__dict__[key].update(value)
-        else:
-          self.__dict__[key] = value
+  @staticmethod
+  def Load(filename):
+    try:
+      with open(filename, "rb") as f:
+        o = pickle.load(f)
+      if o is WebcamComposerSetting:
+        return o
       else:
-        self.__dict__[key] = value
-
-
-def saveSetting(fn, s):
-  with open(fn, "wb") as f:
-    pickle.dump(s, f, -1)
-
-
-def loadSetting(fn):
-  try:
-    with open(fn, "rb") as f:
-      o = pickle.load(f)
-    if o._version == WebcamComposerSetting.SETTING_LATEST_VERSION:
-      return o
-    n = WebcamComposerSetting()
-    n.merge(o)
-    return n
-  except:
-    pass
-  return None
-      
-setting = loadSetting(SETTING_FILENAME) or WebcamComposerSetting()
-
-
+        return WebcamComposerSetting()
+    except:
+      return WebcamComposerSetting()
 
 
 class WebcamComposer(object):
@@ -137,7 +116,8 @@ class WebcamComposer(object):
                            "line-alignment", "xpad", "ypad", 
                            "text")
 
-  def __init__(self, prev_panel=None, on_err_callback=None):
+  def __init__(self, setting, prev_panel=None, on_err_callback=None):
+    self.setting = setting
     self.prev_panel = prev_panel
     self.on_err_callback = on_err_callback
     self.build_composer()
@@ -154,7 +134,7 @@ class WebcamComposer(object):
     videorate2 = gst.element_factory_make('videorate')
     jpegdec = gst.element_factory_make('jpegdec')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
-    self.telops = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
+    self.textoverlays = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.monitorsink= gst.element_factory_make('xvimagesink')
     tee = gst.element_factory_make('tee')
@@ -170,11 +150,11 @@ class WebcamComposer(object):
                     tee, 
                     queue, queue2, queue3, 
                     colorspace1, colorspace2, colorspace3, 
-                    *self.telops)
+                    *self.textoverlays)
 
-    gst.element_link_many(*([self.camerasource, capsfilter, queue, jpegdec, 
+    gst.element_link_many(*([self.camerasource,  capsfilter, queue, jpegdec, 
                              colorspace1, self.framesvg ] 
-                            + self.telops + [ tee ]))
+                            + self.textoverlays + [ tee ]))
     gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
     gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
 
@@ -182,41 +162,47 @@ class WebcamComposer(object):
     # Configuring Elements #
     ########################
     # v4l2src property
-    self.camerasource.set_property('device', setting.SRC_DEVICE)
-    self.camerasource.set_property('blocksize', 65536)
+    self.camerasource.set_property('device', self.setting.source_device)
+    self.camerasource.set_property('always-copy', False)
+    self.camerasource.set_property('queue-size', 4)
+    #self.camerasource.set_property('blocksize', 65536)
 
     # caps property
     srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
-               .format(setting.SRC_WIDTH, 
-                       setting.SRC_HEIGHT, setting.SRC_FRAMERATE)
+               .format(self.setting.source_width, 
+                       self.setting.source_height, 
+                       self.setting.source_framerate)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
 
+    # queue
+    queue.set_property('leaky', 2)
+
     # v4l2sink
-    self.v4l2sink.set_property('device', setting.DST_DEVICE)
+    self.v4l2sink.set_property('device', self.setting.sink_device)
     self.v4l2sink.set_property('sync', False)
 
     # textoverlay
     for i in xrange(N_TELOP):
-      telop = self.telops[i]
+      textoverlay = self.textoverlays[i]
       try:
-        tp = setting.TELOP_PROPERTIES[i]
+        telop_prop = self.setting.telops[i]
       except IndexError:
-        tp = { "_is_cmd" : False }
+        telop_prop = TelopSetting()
 
-      telop.set_property("halignment", tp.get("halignment", "left"))  
-      telop.set_property("valignment", tp.get("valignment", "top"))  # top, bottom, center
-      telop.set_property("line-alignment",  tp.get("line-alignment", "left"))  # left, right
-      telop.set_property("xpad", int(tp.get("xpad", 0))) 
-      telop.set_property("ypad", int(tp.get("ypad", 0)))
-      if tp.get("_is_cmd", False):
-        telop.set_property("text", "")
+      textoverlay.set_property("halignment", telop_prop.halignment)
+      textoverlay.set_property("valignment", telop_prop.valignment)
+      textoverlay.set_property("line-alignment",  telop_prop.linealignment)  # left, right
+      textoverlay.set_property("xpad", int(telop_prop.xpad))
+      textoverlay.set_property("ypad", int(telop_prop.ypad))
+      if telop_prop.is_cmd:
+        textoverlay.set_property("text", "")
       else:
-        telop.set_property("text", tp.get("text", ""))
+        textoverlay.set_property("text", telop_prop.text)
 
     # rsvgoverlay
-    self.framesvg.set_property("location", setting.FRAME_SVG_FILE)
+    self.framesvg.set_property("location", self.setting.frame_svgfile)
 
-    #
+    # sink
     self.monitorsink.set_property("sync", False)
 
     ########################
@@ -228,45 +214,40 @@ class WebcamComposer(object):
     bus.connect("message", self.on_message)
     bus.connect("sync-message::element", self.on_sync_message)
 
+  # Pipeline
+  def Play(self):
+    self.player.set_state(gst.STATE_PLAYING)
 
-  def set_state(self, state):
-    self.player.set_state(state)
+  def Pause(self):
+    self.player.set_state(gst.STATE_PAUSED)
 
+  def Null(self):
+    self.player.set_state(gst.STATE_NULL)
 
-  def set_telop_text(self, no, text):
+  # TextOverlay
+  def SetTelopText(self, no, text):
     try:
-      telop = self.telops[no]
+      textoverlay = self.textoverlays[no]
     except IndexError:
       return 
-    telop.set_property("text", text)
+    textoverlay.set_property("text", text)
 
-
-  def set_telop_property(self, no, propdict):
-    try:
-      telop = self.telops[no]
-    except IndexError:
-      return 
-    for name, value in propdict.iteritems():
-      if name in self.ALLOW_TELOP_PROP_NAME and value:
-        telop.set_property(name, value)
-
-  def set_framesvg_file(self, filepath):
+  # RSvgOverlay
+  def SetFrameSvgFile(self, filepath):
     self.framesvg.set_property("location", filepath)
 
-
-  #########
-  # Event #
-  #########
+  #############
+  # Callbacks #
+  #############
   def on_message(self, bus, message):
     type = message.type
     if type == gst.MESSAGE_EOS:
-      self.player.set_state(gst.STATE_NULL)
+      self.Null()
     elif type == gst.MESSAGE_ERROR:
-      self.player.set_state(gst.STATE_NULL)
+      self.Null()
       msg = message.parse_error()
       if self.on_err_callback and callable(self.on_err_callback):
         self.on_err_callback(msg)
-
 
   def on_sync_message(self, bus, message):
     if message.structure is None:
@@ -281,7 +262,6 @@ class WebcamComposer(object):
         gtk.gdk.threads_leave()
 
 
-
 class StdoutReader(object):
   SR_START = 1
   SR_READY = 2
@@ -292,10 +272,8 @@ class StdoutReader(object):
     self.callback = callback
     self.telop_no = telop_no
     self.child = None
-    self._spawn()
 
-
-  def _spawn(self):
+  def run(self):
     try:
       self.child = subprocess.Popen(self.cmd_and_args, 
                                     stdout=subprocess.PIPE, 
@@ -316,7 +294,6 @@ class StdoutReader(object):
     if self.callback:
         self.callback(self.SR_START, self, None)
 
-
   def _event(self, fd, condition):
     if condition & glib.IO_IN:
       text = []
@@ -336,11 +313,9 @@ class StdoutReader(object):
       return False
     return True
 
-
   def terminate(self):
     if self.child:
       self.child.terminate()
-
 
   def is_running(self):
     if not self.child:
@@ -348,17 +323,16 @@ class StdoutReader(object):
     return (self.child.returncode is None)
 
 
-
-
 class WebcamComposerWindow(gtk.Window):
-  def __init__(self):
+  def __init__(self, setting):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
+
+    self.setting = setting
     self.player = None
     self.spawnlist = [None] * N_TELOP
 
     self.build_window()
     self.set_values()
-
 
   def build_window(self):
     self.set_title("Webcam Comporser")
@@ -382,7 +356,6 @@ class WebcamComposerWindow(gtk.Window):
     # vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
-
 
   def build_camera_box(self):
     vbox = gtk.VBox()
@@ -416,10 +389,10 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_camera_fps.set_size_request(50, -1)
     hbox.pack_start(self.ent_camera_fps, False)
 
-    hbox.pack_start(gtk.Label("Dst:"), False)
-    self.ent_camera_dst = gtk.Entry()
-    self.ent_camera_dst.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_dst, False)
+    hbox.pack_start(gtk.Label("Sink:"), False)
+    self.ent_sink = gtk.Entry()
+    self.ent_sink.set_size_request(100, -1)
+    hbox.pack_start(self.ent_sink, False)
 
     self.btn_camera_tgl = gtk.ToggleButton("Camera Off")
     self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
@@ -429,7 +402,6 @@ class WebcamComposerWindow(gtk.Window):
     vbox.pack_start(self.movie_window, True)
 
     return vbox
-
 
   def build_frame_box(self):
     vbox = gtk.VBox()
@@ -444,7 +416,6 @@ class WebcamComposerWindow(gtk.Window):
     hbox.pack_start(self.setframe_btn, True)
 
     return vbox
-    
 
   def build_telop_box(self):
     vbox = gtk.VBox()
@@ -533,7 +504,6 @@ class WebcamComposerWindow(gtk.Window):
 
     return vbox
 
-
   def build_streaming_box(self):
     hbox = gtk.HBox()
     hbox.set_spacing(8)
@@ -565,7 +535,6 @@ class WebcamComposerWindow(gtk.Window):
 
     return hbox
 
-
   def build_menu(self):
     # File
     menu_quit = gtk.MenuItem(u'Quit')
@@ -582,16 +551,15 @@ class WebcamComposerWindow(gtk.Window):
 
     return menubar
 
-
   def set_values(self):
-    self.ent_camera_src.set_text(setting.SRC_DEVICE)
-    self.ent_camera_fmt.set_text(setting.SRC_FORMAT)
-    self.ent_camera_width.set_text(setting.SRC_WIDTH)
-    self.ent_camera_height.set_text(setting.SRC_HEIGHT)
-    self.ent_camera_fps.set_text(setting.SRC_FRAMERATE)
-    self.ent_camera_dst.set_text(setting.DST_DEVICE)
+    self.ent_camera_src.set_text(self.setting.source_device)
+    self.ent_camera_fmt.set_text(self.setting.source_format)
+    self.ent_camera_width.set_text(self.setting.source_width)
+    self.ent_camera_height.set_text(self.setting.source_height)
+    self.ent_camera_fps.set_text(self.setting.source_framerate)
+    self.ent_sink.set_text(self.setting.sink_device)
 
-    self.setframe_btn.set_filename(setting.FRAME_SVG_FILE)
+    self.setframe_btn.set_filename(self.setting.frame_svgfile)
 
     self.cmb_text_idx.set_active(0)
 
@@ -604,89 +572,75 @@ class WebcamComposerWindow(gtk.Window):
   def on_cmb_text_idx_changed(self, widget):
     idx = widget.get_active()
     try:
-      properties = setting.TELOP_PROPERTIES[idx]
+      telop = self.setting.telops[idx]
     except IndexError:
       return
 
-    self.cmb_text_halign.set_active(
-        _CCS_HALIGN.get(properties.get('halignment', 'left'), 0))
-    self.cmb_text_valign.set_active(
-        _CCS_VALIGN.get(properties.get('valignment', 'top'), 0))
-    self.cmb_text_lalign.set_active(
-        _CCS_HALIGN.get(properties.get('line-alignment', 'left'), 0))
-    self.ent_text_xpad.set_text(str(properties.get('xpad', 0)))
-    self.ent_text_ypad.set_text(str(properties.get('ypad', 0)))
-    is_cmd = properties.get('_is_cmd', False)
-    self.chk_text_is_cmdline.set_active(is_cmd)
-    self.fontselector.set_font_name(properties.get('font-desc', ''))
+    self.cmb_text_halign.set_active(_CCS_HALIGN.get(telop.halignment, 0))
+    self.cmb_text_valign.set_active(_CCS_VALIGN.get(telop.valignment, 0))
+    self.cmb_text_lalign.set_active(_CCS_HALIGN.get(telop.linealignment, 0))
+    self.ent_text_xpad.set_text(str(telop.xpad))
+    self.ent_text_ypad.set_text(str(telop.ypad))
+    self.chk_text_is_cmdline.set_active(telop.is_cmd)
+    self.fontselector.set_font_name(telop.fontdesc)
     self.btn_kill.set_sensitive(False)
-    if is_cmd:
+    if telop.is_cmd:
       spawn = self.spawnlist[idx]
       if spawn and spawn.is_running():
         self.btn_kill.set_sensitive(True)
-    # self.chk_background.set_active(1 if properties.get('shaded-background', False) else 0)
-    self.ent_text.get_buffer().set_text(properties.get('text', ''))
-
+    # self.chk_background.set_active(1 if telop.get('shaded-background', False) else 0)
+    self.ent_text.get_buffer().set_text(telop.text)
 
   def on_update(self, widget, *args):
-    properties = {}
-    properties['halignment'] = self.cmb_text_halign.get_active_text()
-    properties['valignment'] = self.cmb_text_valign.get_active_text()
-    properties['line-alignment'] = self.cmb_text_lalign.get_active_text()
-    properties['xpad'] = int(self.ent_text_xpad.get_text())
-    properties['ypad'] = int(self.ent_text_ypad.get_text())
-    properties['_is_cmd'] = self.chk_text_is_cmdline.get_active()
-    # properties['shaded-background'] = 1 if self.chk_background.get_active() else 0
-    properties['font-desc'] = self.fontselector.get_font_name()
-    properties['text'] = self.getTextViewValue(self.ent_text)
-
-    no = self.cmb_text_idx.get_active()
-    if no < 0:
-      return 
-
-    try:
-      setting.TELOP_PROPERTIES[no] = properties.copy()
-    except IndexError:
+    idx = self.cmb_text_idx.get_active()
+    if idx < 0:
       return
 
-    if self.player:
-      if properties['_is_cmd']:
-        if self.spawnlist[no] is None or not self.spawnlist[no].is_running():
-          cmdline = shlex.split(properties['text'])
-          self.spawnlist[no] = StdoutReader(cmdline, self.on_read_from_stdout, no)
-        properties['text'] = None
-      else:
-        properties['text'] = self.decolateDisplayFont(no, properties['text'])
-      print(properties['text'])
-      self.player.set_telop_property(no, properties)
+    telop = self.setting.telop[no]
 
+    telop.halignment = self.cmb_text_halign.get_active_text()
+    telop.valignment = self.cmb_text_valign.get_active_text()
+    telop.linealignment = self.cmb_text_lalign.get_active_text()
+    telop.xpad = int(self.ent_text_xpad.get_text())
+    telop.ypad = int(self.ent_text_ypad.get_text())
+    telop.is_cmd = self.chk_text_is_cmdline.get_active()
+    # properties['shaded-background'] = 1 if self.chk_background.get_active() else 0
+    telop.fontdesc = self.fontselector.get_font_name()
+    telop.text = self.GetTextViewValue(self.ent_text)
+
+    if self.player:
+      if telop.is_cmd:
+        if self.spawnlist[no] is None or not self.spawnlist[no].is_running():
+          cmdline = shlex.split(telop.text)
+          self.spawnlist[no] = StdoutReader(cmdline, self.on_read_from_stdout, no)
+          self.spawnlist[no].spawn()
+      else:
+        telop.text = self.DecolateDisplayFont(no, telop.text)
 
   def on_camera_startstop(self, widget):
-    if widget.get_active(): 
-      setting.SRC_DEVICE = self.ent_camera_src.get_text()
-      setting.SRC_FORMAT = self.ent_camera_fmt.get_text()
-      setting.SRC_WIDTH = self.ent_camera_width.get_text()
-      setting.SRC_HEIGHT = self.ent_camera_height.get_text()
-      setting.SRC_FRAMERATE = self.ent_camera_fps.get_text()
-      setting.DST_DEVICE = self.ent_camera_dst.get_text()
+    if widget.get_active():
+      self.setting.source_device = self.ent_camera_src.get_text()
+      self.setting.source_format = self.ent_camera_fmt.get_text()
+      self.setting.source_width = self.ent_camera_width.get_text()
+      self.setting.source_height = self.ent_camera_height.get_text()
+      self.setting.source_framerate = self.ent_camera_fps.get_text()
+      self.setting.sink_device = self.ent_sink.get_text()
 
-      self.player = WebcamComposer(prev_panel=self.movie_window, 
-                                   on_err_callback=self.on_cc_error)
-      self.player.set_state(gst.STATE_PAUSED)
-      self.player.set_state(gst.STATE_PLAYING)
+      self.player = WebcamComposer(self.setting,
+                                   prev_panel=self.movie_window,
+                                   on_err_callback=self.on_webcamcomposer_error)
+      self.player.Play()
       self.btn_camera_tgl.set_label("Camera Off")
     else:
       for spawn in self.spawnlist:
         if spawn and spawn.is_running():
           spawn.terminate()
-      self.player.set_state(gst.STATE_NULL)
+      self.player.Null()
       self.player = None
       self.btn_camera_tgl.set_label("Camera On")
 
-
   def on_exec(self, widget):
     pass
-
 
   def on_kill(self, widget):
     no = self.cmb_text_idx.get_active()
@@ -694,18 +648,15 @@ class WebcamComposerWindow(gtk.Window):
     if sr and sr.is_running():
       sr.terminate()
 
-    
   def on_delete(self, widget, *args):
     print("OnDelete is called.")
     if self.player:
       self.player.set_state(gst.STATE_NULL)
     return False 
 
-
   def on_destroy(self, widget, *args):
     print("OnDestroy is called.")
     gtk.main_quit()
-
 
   def on_font_set(self, widget):
     font_name = widget.get_font_name()
@@ -715,56 +666,53 @@ class WebcamComposerWindow(gtk.Window):
   def on_setframe_fileset(self, widget, *args):
     filepath = widget.get_filename()
     if self.player:
-      self.player.set_framesvg_file(filepath)
-    setting.FRAME_SVG_FILE = filepath
+      self.player.SetFrameSvgFile(filepath)
+    self.setting.frame_svgfile = filepath
     print(filepath)
-    
-
 
   # -- External 
-
-  def on_cc_error(self, message): 
+  def on_webcamcomposer_error(self, message): 
     """ WebcamComposer Error Callback """
     print("{0}:{1}".format(*message), file=sys.stderr)
-    if self.player:
-      self.player.set_state(gst.STATE_NULL)
     self.btn_camera_tgl.set_active(False)
     self.btn_camera_tgl.set_label("Camera Off")
-
 
   def on_read_from_stdout(self, msgtype, sr, text):
     """ StdoutReader read data from stdout callback """
     if msgtype == StdoutReader.SR_READY:
       if self.player:
-        text = self.decolateDisplayFont(sr.telop_no, text)
-        self.player.set_telop_text(sr.telop_no, text)
+        text = self.DecolateDisplayFont(sr.telop_no, text)
+        self.player.SetTelopText(sr.telop_no, text)
     elif msgtype == StdoutReader.SR_START:
       self.btn_kill.set_sensitive(True)
     elif msgtype == StdoutReader.SR_END:
       self.btn_kill.set_sensitive(False)
 
-
   ##########
   #  Misc  #
   ##########
-  def getTextViewValue(self, textview):
+  def GetTextViewValue(self, textview):
     buf = textview.get_buffer()
     start, end = buf.get_bounds()
     text = buf.get_text(start, end)
     return text
 
-  def decolateDisplayFont(self, no, text):
+  def DecolateDisplayFont(self, no, text):
     try:
-      p = setting.TELOP_PROPERTIES[no]
+      p = self.setting.telops[no]
     except IndexError:
-      p = None
-    if p and 'font-desc' in p and p['font-desc'] != '':
-      text = '<span font="{0}">{1}</span>'.format(p['font-desc'], text)
+      return
+    if p.fontdesc != '':
+      text = '<span font="{0}">{1}</span>'.format(p.fontdesc, text)
     return text
 
+
 if __name__ == "__main__":
-  cm = WebcamComposerWindow()
+  setting = WebcamComposerSetting.Load(SETTING_FILENAME)
+  cm = WebcamComposerWindow(setting)
   gtk.gdk.threads_init()
-  gtk.main()
-  saveSetting(SETTING_FILENAME, setting)
+  try:
+    gtk.main()
+  finally:
+    setting.Save(SETTING_FILENAME)
 
