@@ -3,7 +3,7 @@
 Simple Webcam Broadcasting Tool For Linux (swbt4l)
 ===================================================
 
-__CAUTION : Not working on GStreamer 0.10.36+. determine in the cause of this problem.__
+__CAUTION : Not working with GStreamer 0.10.36+. determine in the cause of this problem.__
 
 swbt4l is a very simple webcam broadcasting tools with Shellscript and Python.
 This tools works, require other open source softwares. please see below.
@@ -34,7 +34,11 @@ Usage
 -----
 
 	$ ./prepare
-	$ ./broadcast <rmtp uri> <stream>
+
+  # ... 1. Setup webcam and desined video stream.
+	# ... 2. Setup the broadcast on niconama, ustream, ...
+
+	$ ./broadcast <rmtpuri> <stream>
 
 License
 -------
