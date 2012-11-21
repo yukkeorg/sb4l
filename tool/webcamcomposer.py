@@ -3,26 +3,26 @@
 
 # Copyright (c) 2011-2012, Yusuke Ohshima <createtool@yukke.org>
 # All rights reserved.
-# 
-# Redistribution and use in source and binary forms, with or without modification, 
+#
+# Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
-# 
-#   - Redistributions of source code must retain the above copyright notice, 
+#
+#   - Redistributions of source code must retain the above copyright notice,
 #     this list of conditions and the following disclaimer.
-# 
-#   - Redistributions in binary form must reproduce the above copyright notice, 
-#     this list of conditions and the following disclaimer in the documentation 
+#
+#   - Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
 #     and/or other materials provided with the distribution.
-# 
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
-# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY 
-# OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE 
-# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+# OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
 # THE POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
@@ -49,7 +49,7 @@ import gst
 
 
 SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
-N_TELOP = 4
+N_TELOP = 8
 
 _CCS_HALIGN = {
   'left'   : 0,
@@ -65,10 +65,10 @@ _CCS_VALIGN = {
 
 
 class TelopSetting(object):
-  def __init__(self, 
+  def __init__(self,
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
-               is_cmd=False, **kw):
+               is_cmd=False):
       self.valignment = valignment or 'top'
       self.halignment = halignment or 'left'
       self.linealignment = linealignment or 'left'
@@ -103,20 +103,16 @@ class WebcamComposerSetting(object):
     try:
       with open(filename, "rb") as f:
         o = pickle.load(f)
-        print(o)
       if isinstance(o, WebcamComposerSetting):
         return o
       else:
-        print("Not WebcamComposerSetting.")
+        print("Read data is not WebcamComposerSetting type.")
         return WebcamComposerSetting()
     except:
       return WebcamComposerSetting()
 
 
 class WebcamComposer(object):
-  ALLOW_TELOP_PROP_NAME = ("halignment", "valignment", 
-                           "line-alignment", "xpad", "ypad", 
-                           "text")
 
   def __init__(self, setting, prev_panel=None, on_err_callback=None):
     self.setting = setting
@@ -129,16 +125,18 @@ class WebcamComposer(object):
     # Make Elements #
     #################
     self.player = gst.Pipeline('WebcamComposer')
+    #--
     self.camerasource = gst.element_factory_make('v4l2src')
+    self.framesvg = gst.element_factory_make('rsvgoverlay')
+    self.textoverlays = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
+    self.v4l2sink = gst.element_factory_make('v4l2sink')
+    self.monitorsink= gst.element_factory_make('xvimagesink')
+    #--
     capsfilter = gst.element_factory_make('capsfilter')
     capsfilter2 = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
     videorate2 = gst.element_factory_make('videorate')
     jpegdec = gst.element_factory_make('jpegdec')
-    self.framesvg = gst.element_factory_make('rsvgoverlay')
-    self.textoverlays = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
-    self.v4l2sink = gst.element_factory_make('v4l2sink')
-    self.monitorsink= gst.element_factory_make('xvimagesink')
     tee = gst.element_factory_make('tee')
     queue = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
@@ -146,19 +144,6 @@ class WebcamComposer(object):
     colorspace1 = gst.element_factory_make('ffmpegcolorspace')
     colorspace2 = gst.element_factory_make('ffmpegcolorspace')
     colorspace3 = gst.element_factory_make('ffmpegcolorspace')
-
-    self.player.add(self.camerasource, self.v4l2sink, self.monitorsink, self.framesvg,
-                    videorate, videorate2, capsfilter, capsfilter2, jpegdec,
-                    tee, 
-                    queue, queue2, queue3, 
-                    colorspace1, colorspace2, colorspace3, 
-                    *self.textoverlays)
-
-    gst.element_link_many(*([self.camerasource,  capsfilter, queue, jpegdec, 
-                             colorspace1, self.framesvg ] 
-                            + self.textoverlays + [ tee ]))
-    gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
-    gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
 
     ########################
     # Configuring Elements #
@@ -170,10 +155,17 @@ class WebcamComposer(object):
     self.camerasource.set_property('blocksize', 65536)
 
     # caps property
-    srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
-               .format(self.setting.source_width, 
-                       self.setting.source_height, 
-                       self.setting.source_framerate)
+    if self.setting.source_format == 'image/jpeg':
+      srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
+                 .format(self.setting.source_width,
+                         self.setting.source_height,
+                         self.setting.source_framerate)
+    else:
+      srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
+                 .format(self.setting.source_width,
+                         self.setting.source_height,
+                         self.setting.source_framerate)
+
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
 
     # queue
@@ -202,6 +194,23 @@ class WebcamComposer(object):
     # sink
     self.monitorsink.set_property("sync", False)
 
+    ####################
+    # Linking Elements #
+    ####################
+    self.player.add(self.camerasource, self.v4l2sink, self.monitorsink, self.framesvg,
+                    videorate, videorate2,
+                    capsfilter, capsfilter2,
+                    jpegdec,
+                    tee,
+                    queue, queue2, queue3,
+                    colorspace1, colorspace2, colorspace3,
+                    *self.textoverlays)
+    elements = [self.camerasource, capsfilter, queue, jpegdec,
+                colorspace1, self.framesvg ] + self.textoverlays + [ tee ]
+    gst.element_link_many(*elements)
+    gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
+    gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
+
     ########################
     # Connecting Callbacks #
     ########################
@@ -211,7 +220,7 @@ class WebcamComposer(object):
     bus.connect("message", self.on_message)
     bus.connect("sync-message::element", self.on_sync_message)
 
-  # Pipeline
+  # Controller for Pipeline
   def Play(self):
     self.player.set_state(gst.STATE_PLAYING)
 
@@ -234,6 +243,7 @@ class WebcamComposer(object):
     textoverlay.set_property("font-desc", telop_prop.fontdesc)
     textoverlay.set_property("xpad", int(telop_prop.xpad))
     textoverlay.set_property("ypad", int(telop_prop.ypad))
+    textoverlay.set_property("shadow",False) 
 
   # RSvgOverlay
   def SetFrameSvgFile(self, filepath):
@@ -259,7 +269,7 @@ class WebcamComposer(object):
     if message_name == "prepare-xwindow-id":
       imagesink = message.src
       imagesink.set_property("force-aspect-ratio", True)
-      if self.prev_panel: 
+      if self.prev_panel:
         gtk.gdk.threads_enter()
         imagesink.set_xwindow_id(self.prev_panel.window.xid)
         gtk.gdk.threads_leave()
@@ -268,7 +278,7 @@ class WebcamComposer(object):
 class SpawnStdoutReader(object):
   START = 1
   READY = 2
-  END = 3 
+  END = 3
 
   def __init__(self, cmd_and_args, callback, callback_args):
     self.cmd_and_args = cmd_and_args
@@ -278,16 +288,16 @@ class SpawnStdoutReader(object):
 
   def run(self):
     try:
-      self.child = subprocess.Popen(self.cmd_and_args, 
-                                    stdout=subprocess.PIPE, 
+      self.child = subprocess.Popen(self.cmd_and_args,
+                                    stdout=subprocess.PIPE,
                                     close_fds=True)
     except OSError as e:
       print(e.message)
       return
 
     try:
-      glib.io_add_watch(self.child.stdout, 
-                        glib.IO_IN | glib.IO_HUP, 
+      glib.io_add_watch(self.child.stdout,
+                        glib.IO_IN | glib.IO_HUP,
                         self._event)
     except glib.GError as e:
       self.terminate()
@@ -302,7 +312,7 @@ class SpawnStdoutReader(object):
       buf = []
       while True:
         data = fd.read(1)
-        if data == "\x00": 
+        if data == "\x00":
           break
         buf.append(data)
       text = ''.join(buf)
@@ -656,7 +666,7 @@ class WebcamComposerWindow(gtk.Window):
     print("OnDelete is called.")
     if self.player:
       self.player.Null()
-    return False 
+    return False
 
   def on_destroy(self, widget, *args):
     print("OnDestroy is called.")
@@ -673,8 +683,8 @@ class WebcamComposerWindow(gtk.Window):
     self.setting.frame_svgfile = filepath
     print(filepath)
 
-  # -- External 
-  def on_webcamcomposer_error(self, message): 
+  # -- External
+  def on_webcamcomposer_error(self, message):
     """ WebcamComposer Error Callback """
     print("{0}:{1}".format(*message), file=sys.stderr)
     self.btn_camera_tgl.set_active(False)
@@ -710,10 +720,10 @@ class WebcamComposerWindow(gtk.Window):
     return text
 
 
-if __name__ == "__main__":
+def main():
+  gtk.gdk.threads_init()
   setting = WebcamComposerSetting.Load(SETTING_FILENAME)
   cm = WebcamComposerWindow(setting)
-  gtk.gdk.threads_init()
   try:
     gtk.main()
   except:
@@ -722,4 +732,7 @@ if __name__ == "__main__":
     setting.Save(SETTING_FILENAME)
     print("Saved settings to {0}.".format(SETTING_FILENAME))
 
+
+if __name__ == "__main__":
+  main()
 
