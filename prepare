@@ -1,21 +1,20 @@
 #!/bin/sh
-SOURCEDIR=$(dirname "$0")
+BASEDIR=$(dirname "$0")
 
-if [ ${SOURCEDIR}/config/global ]; then
-  . ${SOURCEDIR}/config/global
+if [ ${BASEDIR}/config/global ]; then
+  . ${BASEDIR}/config/global
 else
   echo "Can't open config file." >2
   exit 1
 fi
 
 # --- Install v4l2loopback module
-grep -q v4l2loopback /proc/modules >/dev/null 2>&1
-if [ "$?" != "0" ]; then
+if ! grep -q v4l2loopback /proc/modules >/dev/null 2>&1; then
    sudo modprobe v4l2loopback
 fi
 
 guvcview -d "${CAMERADEVICE}" -o >/dev/null 2>&1 &
-#pavucontrol &
-python ${SOURCEDIR}/tool/webcamcomposer.py &
+pavucontrol &
+${BASEDIR}/webcamcomposer &
 
 

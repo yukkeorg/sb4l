@@ -104,6 +104,10 @@ class WebcamComposerSetting(object):
       with open(filename, "rb") as f:
         o = pickle.load(f)
       if isinstance(o, WebcamComposerSetting):
+        if len(o.telops) < N_TELOP:
+          o.telops = o.telops + [ TelopSetting() for i in xrange(N_TELOP - len(o.telops)) ]
+        elif len(o.telops) > N_TELOP:
+          o.telops = o.telops[:N_TELOP]
         return o
       else:
         print("Read data is not WebcamComposerSetting type.")
