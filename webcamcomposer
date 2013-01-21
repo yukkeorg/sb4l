@@ -247,7 +247,7 @@ class WebcamComposer(object):
     textoverlay.set_property("font-desc", telop_prop.fontdesc)
     textoverlay.set_property("xpad", int(telop_prop.xpad))
     textoverlay.set_property("ypad", int(telop_prop.ypad))
-    textoverlay.set_property("shadow",False) 
+    textoverlay.set_property("shadow",False)
 
   # RSvgOverlay
   def SetFrameSvgFile(self, filepath):
@@ -298,7 +298,6 @@ class SpawnStdoutReader(object):
     except OSError as e:
       print(e.message)
       return
-
     try:
       glib.io_add_watch(self.child.stdout,
                         glib.IO_IN | glib.IO_HUP,

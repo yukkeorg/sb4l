@@ -41,10 +41,13 @@ else
 fi
 
 # --- Muxing video/audio and streaming to server.
-exec ${FFMPEG} ${FFMPEGDEBUG} -y -threads ${FFMPEGTHREADS} \
+exec \
+${FFMPEG} ${FFMPEGDEBUG} -threads ${FFMPEGTHREADS} \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
-       ${VCODEC_OPTS} \
-       ${ACODEC_OPTS} \
+       ${VCODEC_OPTS} ${ACODEC_OPTS} \
        ${OUTPUT_OPTS} "${FULL_OUTPUT_URI}"
+#        ${OUTPUT_OPTS} pipe: \
+#   | ${FFMPEG} -y -re -i - -codec copy -f flv "${FULL_OUTPUT_URI}" \
+#        -codec copy output.flv 
 
