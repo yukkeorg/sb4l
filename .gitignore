@@ -3,3 +3,6 @@
 pyusbio
 *.gpfl
 *.flv
+_build
+bin
+
