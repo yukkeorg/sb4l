@@ -76,7 +76,7 @@ class TelopSetting(object):
       self.ypad = ypad or '0'
       self.fontdesc = fontdesc or ''
       self.text = text or ''
-      self.is_cmd = is_cmd or False
+      self.is_cmd = is_cmd
 
 
 class WebcamComposerSetting(object):
@@ -84,7 +84,6 @@ class WebcamComposerSetting(object):
 
   def __init__(self):
     self._version = self.SETTING_LATEST_VERSION
-
     self.source_device = '/dev/video0'
     self.source_format = 'video/x-raw-yuv'
     self.source_width = '640'
@@ -110,7 +109,7 @@ class WebcamComposerSetting(object):
           o.telops = o.telops[:N_TELOP]
         return o
       else:
-        print("Read data is not WebcamComposerSetting type.")
+        print("Read the data is not WebcamComposerSetting type.")
         return WebcamComposerSetting()
     except:
       return WebcamComposerSetting()
@@ -171,12 +170,15 @@ class WebcamComposer(object):
                          self.setting.source_framerate)
 
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
+    capsfilter2.set_property('caps', 
+                             gst.caps_from_string('video/x-raw-yuv,format=(fourcc)YUY2'))
 
     # queue
-    queue.set_property('leaky', 2)
+    #queue.set_property('leaky', 2)
 
     # v4l2sink
     self.v4l2sink.set_property('device', self.setting.sink_device)
+    self.v4l2sink.set_property('norm', 0)
     self.v4l2sink.set_property('sync', False)
 
     # textoverlay
@@ -212,7 +214,7 @@ class WebcamComposer(object):
     elements = [self.camerasource, capsfilter, queue, jpegdec,
                 colorspace1, self.framesvg ] + self.textoverlays + [ tee ]
     gst.element_link_many(*elements)
-    gst.element_link_many(tee, queue2, colorspace2, self.v4l2sink)
+    gst.element_link_many(tee, queue2, colorspace2, capsfilter2, self.v4l2sink)
     gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
 
     ########################
