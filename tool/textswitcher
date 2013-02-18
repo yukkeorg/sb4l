@@ -1,0 +1,62 @@
+#!/usr/bin/python
+# coding: utf-8
+
+import sys, os
+from gi.repository import GLib, Gio
+
+
+class TextBuffer(object):
+    def __init__(self, eol='\n', encoding=None):
+        self.encoding = encoding or 'utf-8'
+        self.eol = eol
+        self.buffer = []
+        self.maxindex = 0
+        self.index = 0
+
+    def clear(self):
+        self.buffer[:] = []
+        self.maxindex = 0
+        self.index = 0
+
+    def read(self, filename):
+        self.clear()
+        with open(filename, "r") as f:
+            for line in f:
+                line = line.decode(self.encoding).rstrip()
+                self.buffer.append(line)
+                self.maxindex += 1
+            f.close()
+
+    def pull(self):
+        text = ""
+        if self.buffer:
+            text = self.buffer[self.index] + self.eol
+            self.index += 1
+            self.index = self.index % self.maxindex
+        return text
+
+
+class TextSwitcher(object):
+    def __init__(self, filename, interval=5000):
+        self.read_filename = filename
+        self.interval = interval
+        self.text_buffer = TextBuffer(eol='\x00')
+
+    def run(self):
+        self.text_buffer.read(self.read_filename)
+        GLib.timeout_add(self.interval, self.output_text)
+        try:
+            GLib.MainLoop().run()
+        except KeyboardInterrupt:
+            pass
+
+    def output_text(self):
+        sys.stdout.write(self.text_buffer.pull().encode('utf-8'))
+        sys.stdout.flush()
+        return True
+
+
+if __name__ == '__main__':
+    app = TextSwitcher(sys.argv[1])
+    app.run()
+
