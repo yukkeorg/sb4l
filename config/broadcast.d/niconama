@@ -30,7 +30,7 @@ ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNE
 # ニコ生で配信する場合はピクセルフォーマットをyuv420pにすること。
 # yuv422などのピクセルフォーマットは対応していないため、配信開始から
 # 10秒ぐらいでサーバ側からコネクションを切断される。
-OUTPUT_OPTS="-f flv -pix_fmt yuv420p -s 512x384"
+OUTPUT_OPTS="-f flv -pix_fmt yuv420p -s 640x480"
 
 # Output RTMP Communication Protocol Parameters
 # =============================================
