@@ -63,6 +63,9 @@ _CCS_VALIGN = {
   'bottom' : 2,
 }
 
+def debugmsg(msg):
+    print(msg, file=sys.stderr)
+
 
 class TelopSetting(object):
   def __init__(self,
@@ -158,17 +161,10 @@ class WebcamComposer(object):
     self.camerasource.set_property('blocksize', 65536)
 
     # caps property
-    if self.setting.source_format == 'image/jpeg':
-      srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
-                 .format(self.setting.source_width,
-                         self.setting.source_height,
-                         self.setting.source_framerate)
-    else:
-      srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
-                 .format(self.setting.source_width,
-                         self.setting.source_height,
-                         self.setting.source_framerate)
-
+    srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
+               .format(self.setting.source_width,
+                       self.setting.source_height,
+                       self.setting.source_framerate)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
     capsfilter2.set_property('caps', 
                              gst.caps_from_string('video/x-raw-yuv,format=(fourcc)YUY2'))
@@ -203,16 +199,29 @@ class WebcamComposer(object):
     ####################
     # Linking Elements #
     ####################
-    self.player.add(self.camerasource, self.v4l2sink, self.monitorsink, self.framesvg,
-                    videorate, videorate2,
-                    capsfilter, capsfilter2,
+    self.player.add(self.camerasource,
+                    self.v4l2sink,
+                    self.monitorsink,
+                    self.framesvg,
+                    videorate,
+                    videorate2,
+                    capsfilter,
+                    capsfilter2,
                     jpegdec,
                     tee,
-                    queue, queue2, queue3,
-                    colorspace1, colorspace2, colorspace3,
+                    queue,
+                    queue2,
+                    queue3,
+                    colorspace1,
+                    colorspace2,
+                    colorspace3,
                     *self.textoverlays)
-    elements = [self.camerasource, capsfilter, queue, jpegdec,
-                colorspace1, self.framesvg ] + self.textoverlays + [ tee ]
+    elements = [self.camerasource,
+                capsfilter,
+                queue,
+                jpegdec,
+                colorspace1,
+                self.framesvg ] + self.textoverlays + [ tee ]
     gst.element_link_many(*elements)
     gst.element_link_many(tee, queue2, colorspace2, capsfilter2, self.v4l2sink)
     gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
@@ -233,7 +242,7 @@ class WebcamComposer(object):
   def Pause(self):
     self.player.set_state(gst.STATE_PAUSED)
 
-  def Null(self):
+  def Stop(self):
     self.player.set_state(gst.STATE_NULL)
 
   # TextOverlay
@@ -261,9 +270,9 @@ class WebcamComposer(object):
   def on_message(self, bus, message):
     type = message.type
     if type == gst.MESSAGE_EOS:
-      self.Null()
+      self.Stop()
     elif type == gst.MESSAGE_ERROR:
-      self.Null()
+      self.Stop()
       msg = message.parse_error()
       if self.on_err_callback and callable(self.on_err_callback):
         self.on_err_callback(msg)
@@ -300,6 +309,7 @@ class SpawnStdoutReader(object):
     except OSError as e:
       print(e.message)
       return
+
     try:
       glib.io_add_watch(self.child.stdout,
                         glib.IO_IN | glib.IO_HUP,
@@ -371,7 +381,6 @@ class WebcamComposerWindow(gtk.Window):
     vbox_main.pack_start(self.build_camera_box(), True)
     vbox_main.pack_start(self.build_frame_box(), False)
     vbox_main.pack_start(self.build_telop_box(), False)
-    # vbox_main.pack_start(self.build_streaming_box(), False)
 
     self.show_all()
 
@@ -386,11 +395,6 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_camera_src = gtk.Entry()
     self.ent_camera_src.set_size_request(100, -1)
     hbox.pack_start(self.ent_camera_src, False)
-
-    hbox.pack_start(gtk.Label("Fmt:"), False)
-    self.ent_camera_fmt = gtk.Entry()
-    self.ent_camera_fmt.set_size_request(100, -1)
-    hbox.pack_start(self.ent_camera_fmt, False)
 
     hbox.pack_start(gtk.Label("Width:"), False)
     self.ent_camera_width = gtk.Entry()
@@ -499,9 +503,6 @@ class WebcamComposerWindow(gtk.Window):
     self.btn_kill.set_sensitive(False)
     hbox2.pack_start(self.btn_kill, False)
 
-    # self.chk_background = gtk.CheckButton("Shaded Background")
-    # hbox2.pack_start(self.chk_background, False)
-
     hbox2.pack_start(gtk.Label("Display Font:"), False)
     self.fontselector = gtk.FontButton();
     self.fontselector.connect("font-set", self.on_font_set)
@@ -522,37 +523,6 @@ class WebcamComposerWindow(gtk.Window):
 
     return vbox
 
-  def build_streaming_box(self):
-    hbox = gtk.HBox()
-    hbox.set_spacing(8)
-
-    vbox_left = gtk.VBox()
-    vbox_left.set_spacing(8)
-    hbox.pack_start(vbox_left)
-
-    label1 = gtk.Label("Streaming Command-line")
-    label1.set_justify(gtk.JUSTIFY_LEFT)
-    label1.set_alignment(0,0)
-    vbox_left.pack_start(label1, False)
-
-    scroll_text_view = gtk.ScrolledWindow()
-    scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
-    self.ent_stream_cmdline = gtk.TextView()
-    scroll_text_view.add(self.ent_stream_cmdline)
-    vbox_left.pack_start(scroll_text_view)
-
-    vbox_right = gtk.VBox()
-    vbox_right.set_spacing(8)
-    hbox.pack_start(vbox_right, False)
-
-    self.lbl_streamingstatus = gtk.Label()
-    self.lbl_streamingstatus.set_text("Streaming is stopped.")
-    vbox_right.pack_end(self.lbl_streamingstatus, False)
-    self.btn_startstop = gtk.ToggleButton("Streaming")
-    vbox_right.pack_end(self.btn_startstop, False)
-
-    return hbox
-
   def build_menu(self):
     # File
     menu_quit = gtk.MenuItem(u'Quit')
@@ -571,7 +541,6 @@ class WebcamComposerWindow(gtk.Window):
 
   def set_values(self):
     self.ent_camera_src.set_text(self.setting.source_device)
-    self.ent_camera_fmt.set_text(self.setting.source_format)
     self.ent_camera_width.set_text(self.setting.source_width)
     self.ent_camera_height.set_text(self.setting.source_height)
     self.ent_camera_fps.set_text(self.setting.source_framerate)
@@ -639,7 +608,6 @@ class WebcamComposerWindow(gtk.Window):
   def on_camera_startstop(self, widget):
     if widget.get_active():
       self.setting.source_device = self.ent_camera_src.get_text()
-      self.setting.source_format = self.ent_camera_fmt.get_text()
       self.setting.source_width = self.ent_camera_width.get_text()
       self.setting.source_height = self.ent_camera_height.get_text()
       self.setting.source_framerate = self.ent_camera_fps.get_text()
@@ -654,7 +622,7 @@ class WebcamComposerWindow(gtk.Window):
       for spawn in self.spawnlist:
         if spawn and spawn.is_running():
           spawn.terminate()
-      self.player.Null()
+      self.player.Stop()
       self.player = None
       self.btn_camera_tgl.set_label("Camera On")
 
@@ -668,18 +636,18 @@ class WebcamComposerWindow(gtk.Window):
       sr.terminate()
 
   def on_delete(self, widget, *args):
-    print("OnDelete is called.")
+    debugmsg("OnDelete is called.")
     if self.player:
-      self.player.Null()
+      self.player.Stop()
     return False
 
   def on_destroy(self, widget, *args):
-    print("OnDestroy is called.")
+    debugmsg("OnDestroy is called.")
     gtk.main_quit()
 
   def on_font_set(self, widget):
+    debugmsg("Set font is '{0}'.".format(font_name))
     font_name = widget.get_font_name()
-    print("Set font is '{0}'.".format(font_name))
 
   def on_setframe_fileset(self, widget, *args):
     filepath = widget.get_filename()
@@ -691,7 +659,7 @@ class WebcamComposerWindow(gtk.Window):
   # -- External
   def on_webcamcomposer_error(self, message):
     """ WebcamComposer Error Callback """
-    print("{0}:{1}".format(*message), file=sys.stderr)
+    debugmsg("{0}:{1}".format(*message))
     self.btn_camera_tgl.set_active(False)
     self.btn_camera_tgl.set_label("Camera Off")
 
@@ -735,7 +703,7 @@ def main():
     raise
   finally:
     setting.Save(SETTING_FILENAME)
-    print("Saved settings to {0}.".format(SETTING_FILENAME))
+    debugmsg("Saved settings to {0}.".format(SETTING_FILENAME))
 
 
 if __name__ == "__main__":
