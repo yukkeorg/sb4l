@@ -1,25 +1,23 @@
-#/bin/sh
+#bin/sh
 
 set -e
 
 SCRIPTDIR=$(cd -P "$(dirname "$0")" && pwd)
 BUILDDIR=${SCRIPTDIR}/_build
 INSTALLDIR="${SCRIPTDIR}/bin"
-FFMPEGCP="n1.1.2"
+FFMPEGTAG="n1.1.2"
 
 [ ! -d "${BUILDDIR}" ] && mkdir "${BUILDDIR}"
 cd "${BUILDDIR}"
 
-if [ ! -d ffmpeg ]; then
-    git clone git://source.ffmpeg.org/ffmpeg.git ffmpeg
-    cd ffmpeg
-    git checkout "${FFMPEGCP}"
-else
-    cd ffmpeg
+FFMPEGDIR="ffmpeg-${FFMPEGTAG}"
+if [ ! -d "$FFMPEGDIR" ]; then
+    git clone git://source.ffmpeg.org/ffmpeg.git "${FFMPEGDIR}"
 fi
 
-git clean -dfx
-
+cd "${FFMPEGDIR}"
+[ -f ffmpeg ] && make clean
+git checkout "${FFMPEGTAG}"
 ./configure \
   --enable-libx264 \
   --enable-libpulse \
