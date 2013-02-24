@@ -5,15 +5,15 @@
 # Service time
 NOWTIME=$(date +%-H%M)
 if [ "200" -le "$NOWTIME" -a "$NOWTIME" -le "1930" ]; then
-  VBITRATE="380"
+  VBITRATE="400"
 else
-  VBITRATE="270"
+  VBITRATE="310"
 fi
 
-VCODEC_OPTS="-vcodec libx264 -preset slow
-             -partitions i4x4,p8x8,p4x4,b8x8,i8x8 
-             -flags +loop 
-             -crf 26
+VCODEC_OPTS="-vcodec libx264 -preset medium
+             -partitions all
+             -flags +loop -b_strategy 2 -bf 3
+             -crf 25
              -maxrate ${VBITRATE}k -bufsize $((${VBITRATE} * 2))k
              -qmin 10 -qmax 51 
              -keyint_min 0"
@@ -21,16 +21,20 @@ VCODEC_OPTS="-vcodec libx264 -preset slow
 # Output AAC Audio Codec Parameters
 # =================================
 ASAMPLINGRATE="44100"
-ABITRATE="96"
+#ABITRATE="96"
+#ACHANNEL="2"
+#ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
+
+ABITRATE="64"
 ACHANNEL="2"
-ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
+ACODEC_OPTS="-acodec libfdk_aac -profile:a aac_he -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
 
 # Output FLV Container Parameters
 # ===============================
 # ニコ生で配信する場合はピクセルフォーマットをyuv420pにすること。
 # yuv422などのピクセルフォーマットは対応していないため、配信開始から
 # 10秒ぐらいでサーバ側からコネクションを切断される。
-OUTPUT_OPTS="-f flv -pix_fmt yuv420p -s 640x480"
+OUTPUT_OPTS="-f flv -pix_fmt yuv420p -sws_flags accurate_rnd+lanczos -s 640x480"
 
 # Output RTMP Communication Protocol Parameters
 # =============================================
