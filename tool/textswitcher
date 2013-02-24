@@ -37,14 +37,17 @@ class TextBuffer(object):
 
 
 class TextSwitcher(object):
-    def __init__(self, filename, interval=5000):
+    def __init__(self, filename, interval=3500):
         self.read_filename = filename
-        self.interval = interval
+        self.default_interval = interval
         self.text_buffer = TextBuffer(eol='\x00')
 
     def run(self):
         self.text_buffer.read(self.read_filename)
-        GLib.timeout_add(self.interval, self.output_text)
+        f = Gio.File.new_for_path(self.read_filename)
+        self.filemonitor = f.monitor_file(Gio.FileMonitorFlags.NONE, None)
+        self.filemonitor.connect('changed', self.on_file_changed)
+        GLib.timeout_add(self.default_interval, self.output_text)
         try:
             GLib.MainLoop().run()
         except KeyboardInterrupt:
@@ -54,6 +57,11 @@ class TextSwitcher(object):
         sys.stdout.write(self.text_buffer.pull().encode('utf-8'))
         sys.stdout.flush()
         return True
+
+    def on_file_changed(self, monitor, f, otherfile, event):
+        if event in (Gio.FileMonitorEvent.CHANGED,
+                     Gio.FileMonitorEvent.CREATED):
+            self.text_buffer.read(self.read_filename)
 
 
 if __name__ == '__main__':
