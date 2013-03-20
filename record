@@ -6,7 +6,8 @@
 # 
 
 SOURCEDIR=$(dirname "$0")
-OUTPUT_FILE="${1:-record.dat}"
+NOW=$(date +'%Y%m%d_%H%M%S')
+OUTPUT_FILE="record-${NOW}.mkv"
 
 if [ -e ${SOURCEDIR}/config/global ]; then
   . ${SOURCEDIR}/config/global
@@ -15,12 +16,11 @@ else
   exit 1
 fi
 
-${FFMPEG} -y -threads 0 \
+exec   ${FFMPEG} -y -threads 4 \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
-       -vcodec utvideo -q 20 \
+       -vcodec libx264 -q 20 -profile high -preset ultrafast -tune zerolatency \
        -acodec flac -aq 6 \
-       -f matroska \
-       "${OUTPUT_FILE}" &
+       -f matroska "${OUTPUT_FILE}" &
 wait
 

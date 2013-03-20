@@ -10,7 +10,8 @@ fi
 
 # --- Install v4l2loopback module
 if ! grep -q v4l2loopback /proc/modules >/dev/null 2>&1; then
-   sudo modprobe v4l2loopback use_videostd=0
+   # sudo modprobe v4l2loopback use_videostd=0
+   sudo modprobe v4l2loopback ${V4L2LOOPBACK_OPTIONS}
 fi
 
 guvcview -d "${CAMERADEVICE}" -o >/dev/null 2>&1 &
