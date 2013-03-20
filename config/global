@@ -2,8 +2,8 @@ CAMERANAME="C920"
 CAMERADEVICE="/dev/video1"
 BROADCASTER="niconama"
 
-# FFMPEG=${SOURCEDIR}/ffmpeg
-FFMPEG="${SOURCEDIR}/bin/ffmpeg"
+FFMPEG=/usr/local/bin/ffmpeg
+#FFMPEG="${SOURCEDIR}/bin/ffmpeg"
 FFMPEGDEBUG=""
 #FFMPEGDEBUG="-debug 2"
 FFMPEGTHREADS="0"

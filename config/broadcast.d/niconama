@@ -1,6 +1,6 @@
 # FOR Niconama
 
-# Output H.264 Video Codec Parameters
+# Encode H.264 Video Codec Parameters
 # ===================================
 # Service time
 NOWTIME=$(date +%-H%M)
@@ -10,7 +10,7 @@ else
   VBITRATE="310"
 fi
 
-VCODEC_OPTS="-vcodec libx264 -preset medium
+VCODEC_OPTS="-vcodec libx264 -preset fast
              -partitions all
              -flags +loop -b_strategy 2 -bf 3
              -crf 25
@@ -18,23 +18,28 @@ VCODEC_OPTS="-vcodec libx264 -preset medium
              -qmin 10 -qmax 51 
              -keyint_min 0"
 
-# Output AAC Audio Codec Parameters
+# Encode AAC Audio Codec Parameters
 # =================================
-ASAMPLINGRATE="44100"
+
+#Using libfaac
+#ASAMPLINGRATE="44100"
 #ABITRATE="96"
 #ACHANNEL="2"
 #ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
 
+#Using libfdk_aac
+ASAMPLINGRATE="44100"
 ABITRATE="64"
 ACHANNEL="2"
 ACODEC_OPTS="-acodec libfdk_aac -profile:a aac_he -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
 
-# Output FLV Container Parameters
+# Mux FLV Container Parameters
 # ===============================
 # ニコ生で配信する場合はピクセルフォーマットをyuv420pにすること。
 # yuv422などのピクセルフォーマットは対応していないため、配信開始から
 # 10秒ぐらいでサーバ側からコネクションを切断される。
-OUTPUT_OPTS="-f flv -pix_fmt yuv420p -sws_flags accurate_rnd+lanczos -s 640x480"
+OUTPUT_SIZE="512x384"
+OUTPUT_OPTS="-f flv -pix_fmt yuv420p -sws_flags accurate_rnd+lanczos -s ${OUTPUT_SIZE}"
 
 # Output RTMP Communication Protocol Parameters
 # =============================================
