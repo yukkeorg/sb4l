@@ -9,27 +9,29 @@
 #  - ffmpeg ver.N-37669 or later (compiling with librtmp, libx264 and libfaac)
 # 
 
-SOURCEDIR=$(dirname "$0")
 RTMP_URI="$1"
 STREAM="$2"
+SCRIPTDIR=$(cd -P $(dirname "$0") && pwd -P)
 
 # --- Load config files
-if [ -e ${SOURCEDIR}/config/global ]; then  
-  . ${SOURCEDIR}/config/global || exit 1
+if [ -e ${SCRIPTDIR}/config/global ]; then  
+  . ${SCRIPTDIR}/config/global || exit 1
 else
   echo "Can't open config/global file." >2
   exit 1
 fi
-if [ -e ${SOURCEDIR}/config/broadcast.d/${BROADCASTER} ]; then
-  . ${SOURCEDIR}/config/broadcast.d/${BROADCASTER}
+
+BC_CONFFILE="${SCRIPTDIR}/config/broadcast.d/${BROADCASTER}"
+if [ -e "${BC_CONFFILE}" ]; then
+  . ${BC_CONFFILE}
 else
-  echo "Can't open config/broadcast.d/${BeOADCASTER}" >2
+  echo "Can't open ${BC_CONFFILE}" >2
   exit 2
 fi
 
 # --- Adjust parameter
 if [ "${RTMP_URI}" = "test" ]; then
-  FULL_OUTPUT_URI="${SOURCEDIR}/test.flv"
+  FULL_OUTPUT_URI="${SCRIPTDIR}/test.flv"
 else
   if [ -z "${STREAM}" ]; then 
     echo "Please specified RTMP_URI and STREAM."

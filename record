@@ -5,21 +5,24 @@
 # this is script which recording with a webcam.
 # 
 
-SOURCEDIR=$(dirname "$0")
-NOW=$(date +'%Y%m%d_%H%M%S')
-OUTPUT_FILE="record-${NOW}.mkv"
+SCRIPTDIR=$(cd -P $(dirname "$0") && pwd -P)
+NOW=$(date +'%Y%m%d%H%M%S')
+OUTPUT_DIR="${SCRIPTDIR}/captured"
+OUTPUT_FILE="${OUTPUT_DIR}/record-${NOW}.mkv"
 
-if [ -e ${SOURCEDIR}/config/global ]; then
-  . ${SOURCEDIR}/config/global
+if [ -e ${SCRIPTDIR}/config/global ]; then
+  . ${SCRIPTDIR}/config/global
 else
   echo "Can't open config/global file." >2
   exit 1
 fi
 
+[ -d "${OUTPUT_DIR}" ] || mkdir "${OUTPUT_DIR}"
+
 exec   ${FFMPEG} -y -threads 4 \
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
-       -vcodec libx264 -q 20 -profile high -preset ultrafast -tune zerolatency \
+       -vcodec libx264 -q 20 -preset fast -tune zerolatency \
        -acodec flac -aq 6 \
        -f matroska "${OUTPUT_FILE}" &
 wait
