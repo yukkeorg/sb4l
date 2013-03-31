@@ -1,6 +1,6 @@
 <!-- vim: set noet ts=2 sts=2 sw=2 ft=markdown : -->
 
-Simple Broadcasting Tool For Linux (sb4l)
+Simple Broadcast Tool For Linux (sb4l)
 =========================================
 
 swbt4l is a very simple broadcasting tools with Shellscript and Python.
@@ -29,8 +29,8 @@ Require Python Modules
   - http://www.pygtk.org/
 
 
-Prepare
--------
+Setup
+-----
 
 (In Debian)
 
