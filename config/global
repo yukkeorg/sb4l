@@ -1,7 +1,7 @@
 V4L2LOOPBACK_OPTIONS=""
 
 CAMERANAME="C920"
-CAMERADEVICE="/dev/video1"
+CAMERADEVICE="/dev/video0"
 BROADCASTER="niconama"
 
 FFMPEG=/usr/local/bin/ffmpeg
@@ -10,7 +10,7 @@ FFMPEGDEBUG=""
 #FFMPEGDEBUG="-debug 2"
 FFMPEGTHREADS="0"
 
-VIDEO_SRC_DEV="/dev/video2"
+VIDEO_SRC_DEV="/dev/video1"
 VIDEO_SRC_FMT="video4linux2"
 AUDIO_SRC_DEV="default"
 AUDIO_SRC_FMT="pulse"
