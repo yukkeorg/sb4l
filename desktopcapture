@@ -1,0 +1,14 @@
+#!/bin/sh
+
+STARTX="${1:-0}"
+STARTY="${2:-0}"
+WIDTH="${3:-800}"
+HEIGHT="${4:-600}"
+ENDX=$((${STARTX} + ${WIDTH} - 1))
+ENDY=$((${STARTY} + ${HEIGHT} - 1))
+
+exec \
+gst-launch-0.10 ximagesrc startx=${STARTX} starty=${STARTY} endx=${ENDX} endy=${ENDY} \
+                ! "video/x-raw-rgb,width=${WIDTH},height=${HEIGHT},framerate=24/1" \
+                ! ffmpegcolorspace \
+                ! v4l2sink device=/dev/video2 sync=0 \
