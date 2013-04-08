@@ -51,6 +51,11 @@ import gst
 SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
 N_TELOP = 8
 
+_CCS_FORMAT = {
+  'MJPEG'  : 0,
+  'RAW/YUV': 1,
+}
+
 _CCS_HALIGN = {
   'left'   : 0,
   'center' : 1,
@@ -88,7 +93,7 @@ class WebcamComposerSetting(object):
   def __init__(self):
     self._version = self.SETTING_LATEST_VERSION
     self.source_device = '/dev/video0'
-    self.source_format = 'video/x-raw-yuv'
+    self.source_format = 'MJPEG'
     self.source_width = '640'
     self.source_height = '480'
     self.source_framerate = '30/1'
@@ -120,7 +125,6 @@ class WebcamComposerSetting(object):
 
 
 class WebcamComposer(object):
-
   def __init__(self, setting, prev_panel=None, on_err_callback=None):
     self.setting = setting
     self.prev_panel = prev_panel
@@ -139,11 +143,15 @@ class WebcamComposer(object):
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.monitorsink= gst.element_factory_make('xvimagesink')
     #--
+    if self.setting.source_format == "MJPEG":
+      sourcedecoder = gst.element_factory_make('jpegdec')
+    else:
+      sourcedecoder = None
+    #--
     capsfilter = gst.element_factory_make('capsfilter')
     capsfilter2 = gst.element_factory_make('capsfilter')
     videorate = gst.element_factory_make('videorate')
     videorate2 = gst.element_factory_make('videorate')
-    jpegdec = gst.element_factory_make('jpegdec')
     tee = gst.element_factory_make('tee')
     queue = gst.element_factory_make('queue')
     queue2 = gst.element_factory_make('queue')
@@ -162,8 +170,13 @@ class WebcamComposer(object):
     self.camerasource.set_property('blocksize', 65536)
 
     # caps property
-    srccaps = 'image/jpeg,width={0},height={1},framerate={2}' \
-               .format(self.setting.source_width,
+    if self.setting.source_format == "MJPEG":
+      fmt = "image/jpeg"
+    else:
+      fmt = "video/x-raw-yuv"
+    srccaps = '{0},width={1},height={2},framerate={3}' \
+               .format(fmt,
+                       self.setting.source_width,
                        self.setting.source_height,
                        self.setting.source_framerate)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
@@ -200,32 +213,33 @@ class WebcamComposer(object):
     ####################
     # Linking Elements #
     ####################
-    self.player.add(self.camerasource,
-                    self.v4l2sink,
-                    self.monitorsink,
-                    self.framesvg,
-                    videorate,
-                    videorate2,
-                    capsfilter,
-                    capsfilter2,
-                    jpegdec,
-                    tee,
-                    queue,
-                    queue2,
-                    queue3,
-                    colorspace1,
-                    colorspace2,
-                    colorspace3,
-                    *self.textoverlays)
-    elements = [self.camerasource,
-                capsfilter,
-                queue,
-                jpegdec,
-                colorspace1,
-                self.framesvg ] + self.textoverlays + [ tee ]
-    gst.element_link_many(*elements)
-    gst.element_link_many(tee, queue2, colorspace2, capsfilter2, self.v4l2sink)
-    gst.element_link_many(tee, queue3, colorspace3, self.monitorsink)
+    source_elements = [
+        self.camerasource,
+        capsfilter,
+        queue,
+        sourcedecoder,
+        colorspace1,
+        self.framesvg 
+    ] + self.textoverlays + [ tee ]
+    source_elements = [ e for e in source_elements if e is not None ]
+    v4l2output_elements = [
+        queue2, 
+        colorspace2, 
+        capsfilter2, 
+        self.v4l2sink
+    ]
+    monitor_elements = [
+        queue3, 
+        colorspace3, 
+        self.monitorsink
+    ]
+
+    self.player.add(
+        *(source_elements + v4l2output_elements + monitor_elements)
+    )
+    gst.element_link_many(*source_elements)
+    gst.element_link_many(tee, *v4l2output_elements)
+    gst.element_link_many(tee, *monitor_elements)
 
     ########################
     # Connecting Callbacks #
@@ -394,6 +408,12 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_camera_src.set_size_request(100, -1)
     hbox.pack_start(self.ent_camera_src, False)
 
+    hbox.pack_start(gtk.Label("Fmt:"), False)
+    self.cmb_camera_fmt= gtk.combo_box_new_text()
+    self.cmb_camera_fmt.append_text("MJPEG")
+    self.cmb_camera_fmt.append_text("RAW/YUV")
+    hbox.pack_start(self.cmb_camera_fmt, False)
+
     hbox.pack_start(gtk.Label("Width:"), False)
     self.ent_camera_width = gtk.Entry()
     self.ent_camera_width.set_size_request(50, -1)
@@ -523,6 +543,7 @@ class WebcamComposerWindow(gtk.Window):
 
   def set_values(self):
     self.ent_camera_src.set_text(self.setting.source_device)
+    self.cmb_camera_fmt.set_active(_CCS_FORMAT.get(self.setting.source_format, 0))
     self.ent_camera_width.set_text(self.setting.source_width)
     self.ent_camera_height.set_text(self.setting.source_height)
     self.ent_camera_fps.set_text(self.setting.source_framerate)
@@ -588,6 +609,7 @@ class WebcamComposerWindow(gtk.Window):
   def on_camera_startstop(self, widget):
     if widget.get_active():
       self.setting.source_device = self.ent_camera_src.get_text()
+      self.setting.source_format = self.cmb_camera_fmt.get_active_text()
       self.setting.source_width = self.ent_camera_width.get_text()
       self.setting.source_height = self.ent_camera_height.get_text()
       self.setting.source_framerate = self.ent_camera_fps.get_text()
