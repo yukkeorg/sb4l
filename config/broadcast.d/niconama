@@ -5,18 +5,16 @@
 # Service time
 NOWTIME=$(date +%-H%M)
 if [ "200" -le "$NOWTIME" -a "$NOWTIME" -le "1930" ]; then
-  VBITRATE="400"
+  VBITRATE="430"
 else
-  VBITRATE="310"
+  VBITRATE="320"
 fi
 
-VCODEC_OPTS="-vcodec libx264 -preset fast
-             -partitions all
-             -flags +loop -b_strategy 2 -bf 3
-             -crf 25
+VCODEC_OPTS="-vcodec libx264 -preset fast -profile high
+             -partitions all -subq 10 -g 250 -keyint_min 0 -me_method umh
+             -flags +loop -b_strategy 2 -bf 3 -crf 24 -qcomp 0.5
              -maxrate ${VBITRATE}k -bufsize $((${VBITRATE} * 2))k
-             -qmin 10 -qmax 51 
-             -keyint_min 0"
+             -qmin 10 -qmax 51"
 
 # Encode AAC Audio Codec Parameters
 # =================================
@@ -29,9 +27,10 @@ VCODEC_OPTS="-vcodec libx264 -preset fast
 
 #Using libfdk_aac
 ASAMPLINGRATE="44100"
-ABITRATE="64"
+ABITRATE="48"
 ACHANNEL="2"
-ACODEC_OPTS="-acodec libfdk_aac -profile:a aac_he -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
+ACODEC_OPTS="-acodec libfdk_aac -profile:a aac_he 
+             -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
 
 # Mux FLV Container Parameters
 # ===============================
@@ -39,7 +38,9 @@ ACODEC_OPTS="-acodec libfdk_aac -profile:a aac_he -ar ${ASAMPLINGRATE} -ab ${ABI
 # yuv422などのピクセルフォーマットは対応していないため、配信開始から
 # 10秒ぐらいでサーバ側からコネクションを切断される。
 OUTPUT_SIZE="512x384"
-OUTPUT_OPTS="-f flv -pix_fmt yuv420p -sws_flags accurate_rnd+lanczos -s ${OUTPUT_SIZE}"
+OUTPUT_OPTS="-f flv -pix_fmt yuv420p 
+             -sws_flags accurate_rnd+lanczos 
+             -s ${OUTPUT_SIZE}"
 
 # Output RTMP Communication Protocol Parameters
 # =============================================
