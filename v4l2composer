@@ -82,12 +82,12 @@ class TelopSetting(object):
       self.linealignment = linealignment or 'left'
       self.xpad = xpad or '0'
       self.ypad = ypad or '0'
-      self.fontdesc = fontdesc or ''
+      self.fontdesc = fontdesc or 'Sans 10'
       self.text = text or ''
       self.is_cmd = is_cmd
 
 
-class WebcamComposerSetting(object):
+class V4l2ComposerSetting(object):
   SETTING_LATEST_VERSION = '1.0'
 
   def __init__(self):
@@ -111,20 +111,20 @@ class WebcamComposerSetting(object):
     try:
       with open(filename, "rb") as f:
         o = pickle.load(f)
-      if isinstance(o, WebcamComposerSetting):
+      if isinstance(o, V4l2ComposerSetting):
         if len(o.telops) < N_TELOP:
           o.telops = o.telops + [ TelopSetting() for i in xrange(N_TELOP - len(o.telops)) ]
         elif len(o.telops) > N_TELOP:
           o.telops = o.telops[:N_TELOP]
         return o
       else:
-        print("Read the data is not WebcamComposerSetting type.")
-        return WebcamComposerSetting()
+        print("Read the data is not V4l2ComposerSetting type.")
+        return V4l2ComposerSetting()
     except:
-      return WebcamComposerSetting()
+      return V4l2ComposerSetting()
 
 
-class WebcamComposer(object):
+class V4l2Composer(object):
   def __init__(self, setting, prev_panel=None, on_err_callback=None):
     self.setting = setting
     self.prev_panel = prev_panel
@@ -135,7 +135,7 @@ class WebcamComposer(object):
     #################
     # Make Elements #
     #################
-    self.player = gst.Pipeline('WebcamComposer')
+    self.player = gst.Pipeline('V4l2Composer')
     #--
     self.camerasource = gst.element_factory_make('v4l2src')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
@@ -214,28 +214,35 @@ class WebcamComposer(object):
     # Linking Elements #
     ####################
     source_elements = [
+      e for e in [
         self.camerasource,
         capsfilter,
         queue,
         sourcedecoder,
         colorspace1,
-        self.framesvg 
-    ] + self.textoverlays + [ tee ]
-    source_elements = [ e for e in source_elements if e is not None ]
-    v4l2output_elements = [
-        queue2, 
-        colorspace2, 
-        capsfilter2, 
-        self.v4l2sink
+        self.framesvg, ]
+      + self.textoverlays
+      + [ tee ]
+      if e is not None 
     ]
+
+    v4l2output_elements = [
+      queue2,
+      colorspace2,
+      capsfilter2,
+      self.v4l2sink
+    ]
+
     monitor_elements = [
-        queue3, 
-        colorspace3, 
-        self.monitorsink
+      queue3,
+      colorspace3,
+      self.monitorsink
     ]
 
     self.player.add(
-        *(source_elements + v4l2output_elements + monitor_elements)
+      *(source_elements
+        + v4l2output_elements
+        + monitor_elements)
     )
     gst.element_link_many(*source_elements)
     gst.element_link_many(tee, *v4l2output_elements)
@@ -366,7 +373,7 @@ class SpawnStdoutReader(object):
     return (self.child.returncode is None)
 
 
-class WebcamComposerWindow(gtk.Window):
+class V4l2ComposerWindow(gtk.Window):
   def __init__(self, setting):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
 
@@ -378,7 +385,7 @@ class WebcamComposerWindow(gtk.Window):
     self.set_values()
 
   def build_window(self):
-    self.set_title("Webcam Comporser")
+    self.set_title("V4l2 Comporser")
     self.set_default_size(800, 600)
     self.connect("delete-event", self.on_delete)
     self.connect("destroy", self.on_destroy)
@@ -434,7 +441,7 @@ class WebcamComposerWindow(gtk.Window):
     self.ent_sink.set_size_request(100, -1)
     hbox.pack_start(self.ent_sink, False)
 
-    self.btn_camera_tgl = gtk.ToggleButton("Camera Off")
+    self.btn_camera_tgl = gtk.ToggleButton("Off")
     self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
     hbox.pack_start(self.btn_camera_tgl, True)
 
@@ -585,7 +592,6 @@ class WebcamComposerWindow(gtk.Window):
       return
 
     telop = self.setting.telops[idx]
-
     telop.halignment = self.cmb_text_halign.get_active_text()
     telop.valignment = self.cmb_text_valign.get_active_text()
     telop.linealignment = self.cmb_text_lalign.get_active_text()
@@ -595,15 +601,16 @@ class WebcamComposerWindow(gtk.Window):
     telop.fontdesc = self.fontselector.get_font_name()
     telop.text = self.GetTextViewValue(self.ent_text)
 
-    if self.player:
-      self.player.SetTelopAtrribute(idx, telop)
-      if telop.is_cmd:
-        if self.spawnlist[idx] is None or not self.spawnlist[idx].is_running():
-          cmdline = shlex.split(telop.text)
-          self.spawnlist[idx] = SpawnStdoutReader(cmdline, self.on_read_from_stdout, (idx,))
-          self.spawnlist[idx].run()
-      else:
-        t = self.DecolateDisplayFont(idx, telop.text)
+    #if self.player:
+    self.player.SetTelopAtrribute(idx, telop)
+    if telop.is_cmd:
+      if self.spawnlist[idx] is None or not self.spawnlist[idx].is_running():
+        cmdline = shlex.split(telop.text)
+        self.spawnlist[idx] = SpawnStdoutReader(cmdline, self.on_read_from_stdout, (idx,))
+        self.spawnlist[idx].run()
+    else:
+      t = self.DecolateDisplayFont(idx, telop.text)
+      if self.player:
         self.player.SetTelopText(idx, t)
 
   def on_camera_startstop(self, widget):
@@ -615,32 +622,32 @@ class WebcamComposerWindow(gtk.Window):
       self.setting.source_framerate = self.ent_camera_fps.get_text()
       self.setting.sink_device = self.ent_sink.get_text()
 
-      self.player = WebcamComposer(self.setting,
-                                   prev_panel=self.movie_window,
-                                   on_err_callback=self.on_webcamcomposer_error)
+      self.player = V4l2Composer(self.setting,
+                                 prev_panel=self.movie_window,
+                                 on_err_callback=self.on_webcamcomposer_error)
       self.player.Play()
-      self.btn_camera_tgl.set_label("Camera Off")
+      self.btn_camera_tgl.set_label("On")
     else:
-      for spawn in self.spawnlist:
-        if spawn and spawn.is_running():
-          spawn.terminate()
       self.player.Stop()
       self.player = None
-      self.btn_camera_tgl.set_label("Camera On")
+      self.btn_camera_tgl.set_label("Off")
 
   def on_exec(self, widget):
     pass
 
   def on_kill(self, widget):
     no = self.cmb_text_idx.get_active()
-    sr = self.spawnlist[no]
-    if sr and sr.is_running():
-      sr.terminate()
+    sl = self.spawnlist[no]
+    if sl and sl.is_running():
+      sl.terminate()
 
   def on_delete(self, widget, *args):
     debugmsg("OnDelete is called.")
     if self.player:
       self.player.Stop()
+    for s in self.spawnlist:
+      if s and s.is_running():
+        s.terminate()
     return False
 
   def on_destroy(self, widget, *args):
@@ -648,22 +655,22 @@ class WebcamComposerWindow(gtk.Window):
     gtk.main_quit()
 
   def on_font_set(self, widget):
-    debugmsg("Set font is '{0}'.".format(font_name))
     font_name = widget.get_font_name()
+    debugmsg("Set font is '{0}'.".format(font_name))
 
   def on_setframe_fileset(self, widget, *args):
     filepath = widget.get_filename()
     if self.player:
       self.player.SetFrameSvgFile(filepath)
     self.setting.frame_svgfile = filepath
-    print(filepath)
+    debugmsg("load frame svg file: {0}".format(filepath))
 
   # -- External
   def on_webcamcomposer_error(self, message):
-    """ WebcamComposer Error Callback """
+    """ V4l2Composer Error Callback """
     debugmsg("{0}:{1}".format(*message))
     self.btn_camera_tgl.set_active(False)
-    self.btn_camera_tgl.set_label("Camera Off")
+    self.btn_camera_tgl.set_label("Off")
 
   def on_read_from_stdout(self, msgtype, text, args):
     """ SpawnStdoutReader read data from stdout callback """
@@ -697,8 +704,8 @@ class WebcamComposerWindow(gtk.Window):
 
 def main():
   gtk.gdk.threads_init()
-  setting = WebcamComposerSetting.Load(SETTING_FILENAME)
-  cm = WebcamComposerWindow(setting)
+  setting = V4l2ComposerSetting.Load(SETTING_FILENAME)
+  cm = V4l2ComposerWindow(setting)
   try:
     gtk.main()
   except:
