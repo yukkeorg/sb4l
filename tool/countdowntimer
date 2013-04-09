@@ -14,16 +14,16 @@ class CountdownTimer(object):
     a = []
     if int(dt) > 0:
       d = int(dt // 86400)
-      if d > 0:
-        a.append('{0:d}<span size="small">days</span>'.format(d))
+      if d > 0: 
+        a.append('{0:d}d '.format(d))
       h = int((dt // 3600) % 24)
-      if h > 0 or d > 0:
-        a.append('{0:d}<span size="small">hour</span>'.format(h))
+      if d > 0 or h > 0:
+        a.append('{0:02d}:'.format(h))
       m = int((dt // 60) % 60)
-      if m > 0 or h > 0:
-        a.append('{0:d}<span size="small">min</span>'.format(m))
+      if d > 0 or h > 0 or m > 0:
+        a.append('{0:02d}'.format(m))
       s = int(dt % 60)
-      a.append('{0:d}<span size="small">sec</span>'.format(s))
+      a.append(':{0:02d}'.format(s))
     else:
       a.append("FINISH")
     sys.stdout.write(''.join(a) + "\0")
