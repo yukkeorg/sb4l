@@ -16,6 +16,6 @@ fi
 
 guvcview -d "${CAMERADEVICE}" -o >/dev/null 2>&1 &
 pavucontrol &
-${BASEDIR}/webcamcomposer &
+${BASEDIR}/v4l2composer &
 
 
