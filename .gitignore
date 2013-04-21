@@ -2,8 +2,9 @@
 *.py[co]
 pyusbio
 *.gpfl
-*.flv
 _build
 bin
 *.mkv
-
+*.flv
+resource/_*
+tmp.*
