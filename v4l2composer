@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
+# vim: expandtab ts=2 sts=2 sw=2
 
 # Copyright (c) 2011-2012, Yusuke Ohshima <createtool@yukke.org>
 # All rights reserved.
@@ -47,6 +48,8 @@ import pygst
 pygst.require('0.10')
 import gst
 
+import json
+
 
 SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
 N_TELOP = 8
@@ -76,7 +79,7 @@ class TelopSetting(object):
   def __init__(self,
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
-               is_cmd=False, *args, **kw):
+               is_cmd=False, silent=False, *args, **kw):
       self.valignment = valignment or 'top'
       self.halignment = halignment or 'left'
       self.linealignment = linealignment or 'left'
@@ -85,10 +88,11 @@ class TelopSetting(object):
       self.fontdesc = fontdesc or 'Sans 10'
       self.text = text or ''
       self.is_cmd = is_cmd
+      self.silent = silent
 
 
 class V4l2ComposerSetting(object):
-  SETTING_LATEST_VERSION = '1.0'
+  SETTING_LATEST_VERSION = '1.1'
 
   def __init__(self):
     self._version = self.SETTING_LATEST_VERSION
@@ -269,8 +273,12 @@ class V4l2Composer(object):
 
   # TextOverlay
   def SetTelopText(self, no, text):
-    textoverlay = self.textoverlays[no]
-    textoverlay.set_property("text", text)
+    try:
+      textoverlay = self.textoverlays[no]
+    except IndexError:
+      return
+    else:
+      textoverlay.set_property("text", text)
 
   def SetTelopAtrribute(self, no, telop_prop):
     textoverlay = self.textoverlays[no]
@@ -280,7 +288,8 @@ class V4l2Composer(object):
     textoverlay.set_property("font-desc", telop_prop.fontdesc)
     textoverlay.set_property("xpad", int(telop_prop.xpad))
     textoverlay.set_property("ypad", int(telop_prop.ypad))
-    textoverlay.set_property("shadow",False)
+    textoverlay.set_property("silent", telop_prop.silent)
+    #textoverlay.set_property("shadow",False)
 
   # RSvgOverlay
   def SetFrameSvgFile(self, filepath):
@@ -313,19 +322,19 @@ class V4l2Composer(object):
 
 
 class SpawnStdoutReader(object):
-  START = 1
-  READY = 2
-  END = 3
-
-  def __init__(self, cmd_and_args, callback, callback_args):
-    self.cmd_and_args = cmd_and_args
-    self.callback = callback
+  def __init__(self, commandline,
+               init_callback=None, read_callback=None, term_callback=None,
+               callback_args=None):
+    self.commandline = commandline
+    self.init_callback = init_callback
+    self.read_callback = read_callback
+    self.term_callback = term_callback
     self.callback_args = callback_args
     self.child = None
 
   def run(self):
     try:
-      self.child = subprocess.Popen(self.cmd_and_args,
+      self.child = subprocess.Popen(self.commandline,
                                     stdout=subprocess.PIPE,
                                     close_fds=True)
     except OSError as e:
@@ -335,33 +344,39 @@ class SpawnStdoutReader(object):
     try:
       glib.io_add_watch(self.child.stdout,
                         glib.IO_IN | glib.IO_HUP,
-                        self._event)
+                        self._eventHandler)
     except glib.GError as e:
       self.terminate()
       print(e.message)
       return
 
-    if self.callback:
-        self.callback(self.START, None, self.callback_args)
+    if self.init_callback:
+      self.init_callback(self.callback_args)
 
-  def _event(self, fd, condition):
+  def _eventHandler(self, fd, condition):
     if condition & glib.IO_IN:
       buf = []
       while True:
         data = fd.read(1)
-        if data == "\x00":
+        if data == "\x00" or data == "":
           break
         buf.append(data)
       text = ''.join(buf)
-      if self.callback:
-        self.callback(self.READY, text, self.callback_args)
+      if self.read_callback:
+        self.read_callback(text, self.callback_args)
 
     if condition & glib.IO_HUP:
       self.child.poll()
-      if self.callback:
-        self.callback(self.END, None, self.callback_args)
+      if self.term_callback:
+        self.term_callback(self.callback_args)
       return False
     return True
+
+  def getpid(self):
+    pid = -1
+    if self.child:
+      pid = self.child.pid
+    return pid
 
   def terminate(self):
     if self.child:
@@ -533,11 +548,13 @@ class V4l2ComposerWindow(gtk.Window):
     self.fontselector.connect("font-set", self.on_font_set)
     hbox2.pack_start(self.fontselector, False)
 
-
     self.btn_update = gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
     self.btn_update.connect("clicked", self.on_update)
     hbox2.pack_end(self.btn_update, False)
+
+    self.chk_silent = gtk.CheckButton("Silent")
+    hbox2.pack_end(self.chk_silent, False)
 
     scroll_text_view = gtk.ScrolledWindow()
     scroll_text_view.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
@@ -577,6 +594,7 @@ class V4l2ComposerWindow(gtk.Window):
     self.ent_text_xpad.set_text(str(telop.xpad))
     self.ent_text_ypad.set_text(str(telop.ypad))
     self.chk_text_is_cmdline.set_active(telop.is_cmd)
+    self.chk_silent.set_active(telop.silent)
     self.fontselector.set_font_name(telop.fontdesc)
     self.btn_kill.set_sensitive(False)
     if telop.is_cmd:
@@ -598,15 +616,21 @@ class V4l2ComposerWindow(gtk.Window):
     telop.xpad = int(self.ent_text_xpad.get_text())
     telop.ypad = int(self.ent_text_ypad.get_text())
     telop.is_cmd = self.chk_text_is_cmdline.get_active()
+    telop.silent = self.chk_silent.get_active()
     telop.fontdesc = self.fontselector.get_font_name()
     telop.text = self.GetTextViewValue(self.ent_text)
 
     #if self.player:
     self.player.SetTelopAtrribute(idx, telop)
+
     if telop.is_cmd:
       if self.spawnlist[idx] is None or not self.spawnlist[idx].is_running():
         cmdline = shlex.split(telop.text)
-        self.spawnlist[idx] = SpawnStdoutReader(cmdline, self.on_read_from_stdout, (idx,))
+        self.spawnlist[idx] = SpawnStdoutReader(cmdline,
+                                                init_callback=self.on_init_subprocess,
+                                                read_callback=self.on_read_stdout,
+                                                term_callback=self.on_term_subprocess,
+                                                callback_args=(idx,))
         self.spawnlist[idx].run()
     else:
       t = self.DecolateDisplayFont(idx, telop.text)
@@ -639,6 +663,7 @@ class V4l2ComposerWindow(gtk.Window):
     no = self.cmb_text_idx.get_active()
     sl = self.spawnlist[no]
     if sl and sl.is_running():
+      debumsg("Terminated subprocess: {0}.".format(sl.getpid()))
       sl.terminate()
 
   def on_delete(self, widget, *args):
@@ -665,6 +690,7 @@ class V4l2ComposerWindow(gtk.Window):
     self.setting.frame_svgfile = filepath
     debugmsg("load frame svg file: {0}".format(filepath))
 
+
   # -- External
   def on_webcamcomposer_error(self, message):
     """ V4l2Composer Error Callback """
@@ -672,16 +698,32 @@ class V4l2ComposerWindow(gtk.Window):
     self.btn_camera_tgl.set_active(False)
     self.btn_camera_tgl.set_label("Off")
 
-  def on_read_from_stdout(self, msgtype, text, args):
-    """ SpawnStdoutReader read data from stdout callback """
+  # -- SpawnStdoutReader callbacks
+  def on_init_subprocess(self, args):
+    self.btn_kill.set_sensitive(True)
+
+  def on_read_stdout(self, text, args):
     (idx, ) = args
-    if msgtype == SpawnStdoutReader.READY:
-      if self.player:
-        self.player.SetTelopText(idx, text)
-    elif msgtype == SpawnStdoutReader.START:
-      self.btn_kill.set_sensitive(True)
-    elif msgtype == SpawnStdoutReader.END:
-      self.btn_kill.set_sensitive(False)
+    if not self.player:
+      return
+
+    try:
+      parsedata = json.loads(text)
+    except ValueError:
+      self.player.SetTelopText(idx, text)
+      return
+
+    for key in parsedata:
+      try:
+        idx = int(key)
+      except ValueError:
+        continue
+      else:
+        self.player.SetTelopText(idx, parsedata[key])
+
+
+  def on_term_subprocess(self, args):
+    self.btn_kill.set_sensitive(False)
 
   ##########
   #  Misc  #
