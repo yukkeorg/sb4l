@@ -49,6 +49,10 @@ pygst.require('0.10')
 import gst
 
 import json
+try:
+  import cStringIO as StringIO
+except:
+  import StringIO
 
 
 SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
@@ -289,7 +293,7 @@ class V4l2Composer(object):
     textoverlay.set_property("xpad", int(telop_prop.xpad))
     textoverlay.set_property("ypad", int(telop_prop.ypad))
     textoverlay.set_property("silent", telop_prop.silent)
-    #textoverlay.set_property("shadow",False)
+    textoverlay.set_property("shadow",False)
 
   # RSvgOverlay
   def SetFrameSvgFile(self, filepath):
@@ -355,21 +359,23 @@ class SpawnStdoutReader(object):
 
   def _eventHandler(self, fd, condition):
     if condition & glib.IO_IN:
-      buf = []
+      buf = StringIO.StringIO()
       while True:
         data = fd.read(1)
         if data == "\x00" or data == "":
           break
-        buf.append(data)
-      text = ''.join(buf)
+        buf.write(data)
       if self.read_callback:
+        text = buf.getvalue()
         self.read_callback(text, self.callback_args)
+      buf.close()
 
     if condition & glib.IO_HUP:
-      self.child.poll()
-      if self.term_callback:
-        self.term_callback(self.callback_args)
-      return False
+      if self.child:
+        self.child.poll()
+        if self.term_callback:
+          self.term_callback(self.callback_args)
+        return False
     return True
 
   def getpid(self):
@@ -383,9 +389,9 @@ class SpawnStdoutReader(object):
       self.child.terminate()
 
   def is_running(self):
-    if not self.child:
-      return False
-    return (self.child.returncode is None)
+    if self.child:
+      return (self.child.returncode is None)
+    return False
 
 
 class V4l2ComposerWindow(gtk.Window):
@@ -624,17 +630,22 @@ class V4l2ComposerWindow(gtk.Window):
     self.player.SetTelopAtrribute(idx, telop)
 
     if telop.is_cmd:
-      if self.spawnlist[idx] is None or not self.spawnlist[idx].is_running():
-        cmdline = shlex.split(telop.text)
-        self.spawnlist[idx] = SpawnStdoutReader(cmdline,
-                                                init_callback=self.on_init_subprocess,
-                                                read_callback=self.on_read_stdout,
-                                                term_callback=self.on_term_subprocess,
-                                                callback_args=(idx,))
-        self.spawnlist[idx].run()
+      if self.spawnlist[idx]:
+        if self.spawnlist[idx].is_running():
+          return
+        else:
+          self.spawnlist[idx] = None
+      cmdline = shlex.split(telop.text)
+      s = SpawnStdoutReader(cmdline,
+                            init_callback=self.on_init_subprocess,
+                            read_callback=self.on_read_stdout,
+                            term_callback=self.on_term_subprocess,
+                            callback_args=(idx,))
+      s.run()
+      self.spawnlist[idx] = s
     else:
-      t = self.DecolateDisplayFont(idx, telop.text)
       if self.player:
+        t = self.DecolateDisplayFont(idx, telop.text)
         self.player.SetTelopText(idx, t)
 
   def on_camera_startstop(self, widget):
@@ -663,7 +674,7 @@ class V4l2ComposerWindow(gtk.Window):
     no = self.cmb_text_idx.get_active()
     sl = self.spawnlist[no]
     if sl and sl.is_running():
-      debumsg("Terminated subprocess: {0}.".format(sl.getpid()))
+      debugmsg("Terminated subprocess: {0}.".format(sl.getpid()))
       sl.terminate()
 
   def on_delete(self, widget, *args):
@@ -713,13 +724,16 @@ class V4l2ComposerWindow(gtk.Window):
       self.player.SetTelopText(idx, text)
       return
 
-    for key in parsedata:
-      try:
-        idx = int(key)
-      except ValueError:
-        continue
-      else:
-        self.player.SetTelopText(idx, parsedata[key])
+    if isinstance(parsedata, dict):
+      for key in parsedata:
+        try:
+          idx = int(key)
+        except ValueError:
+          continue
+        else:
+          self.player.SetTelopText(idx, parsedata[key])
+    else:
+      self.player.SetTelopText(idx, text)
 
 
   def on_term_subprocess(self, args):
