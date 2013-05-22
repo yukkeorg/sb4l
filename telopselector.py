@@ -1,0 +1,68 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+from __future__ import print_function
+
+import sys
+import json
+from gi.repository import Gtk
+
+
+class Group(list):
+    def loadArgs(self, args):
+        for arg in args:
+            if arg == 'off':
+                self.append(["off"])
+            else:
+                elems = arg.split(',')
+                self.append(elems)
+
+    def A(self, idx):
+        t = []
+        f = []
+        for i, elem in enumerate(self):
+            e = [ e for e in elem if e != "off" ]
+            if i == idx:
+                t.extend(e)
+            else:
+                f.extend(e)
+        return t, f
+
+
+class Window(Gtk.Window):
+    def __init__(self, group):
+        Gtk.Window.__init__(self, title="Telop Selector")
+        self.group = group
+
+        self.connect("delete-event", Gtk.main_quit)
+
+        self.set_border_width(10)
+
+        hbox = Gtk.Box(spacing=6)
+        self.add(hbox)
+
+        bb = None
+        for i, g in enumerate(group):
+            b = Gtk.RadioButton.new_with_label_from_widget(bb, ",".join(g))
+            if bb is None: bb = b
+            b.connect('clicked', self.on_toggled, i)
+            hbox.pack_start(b, False, False, 0)
+
+    def on_toggled(self, button, idx):
+        if button.get_active():
+            showno_list, hideno_list = self.group.A(idx)
+            data = { 'shows': showno_list, 'hides': hideno_list }
+            sys.stdout.write(json.dumps(data))
+            sys.stdout.write("\0")
+            sys.stdout.flush()
+
+
+def main(args):
+    group = Group()
+    group.loadArgs(args)
+    window = Window(group)
+    window.show_all()
+    Gtk.main()
+
+main(sys.argv[1:])
+

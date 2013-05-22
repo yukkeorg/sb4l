@@ -2,7 +2,7 @@
 # coding: utf-8
 # vim: expandtab ts=2 sts=2 sw=2
 
-# Copyright (c) 2011-2012, Yusuke Ohshima <createtool@yukke.org>
+# Copyright (c) 2011-2013, Yusuke Ohshima <createtool@yukke.org>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -34,10 +34,15 @@ import codecs
 import shlex
 import subprocess
 import signal
+import json
 try:
   import cPickle as pickle
 except ImportError:
   import pickle
+try:
+  import cStringIO as StringIO
+except:
+  import StringIO
 
 import pygtk
 pygtk.require('2.0')
@@ -48,15 +53,10 @@ import pygst
 pygst.require('0.10')
 import gst
 
-import json
-try:
-  import cStringIO as StringIO
-except:
-  import StringIO
-
 
 SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
-N_TELOP = 8
+N_TELOPS = 12
+
 
 _CCS_FORMAT = {
   'MJPEG'  : 0,
@@ -84,15 +84,25 @@ class TelopSetting(object):
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
                is_cmd=False, silent=False, *args, **kw):
-      self.valignment = valignment or 'top'
-      self.halignment = halignment or 'left'
-      self.linealignment = linealignment or 'left'
-      self.xpad = xpad or '0'
-      self.ypad = ypad or '0'
-      self.fontdesc = fontdesc or 'Sans 10'
-      self.text = text or ''
+      self.valignment = valignment
+      self.halignment = halignment
+      self.linealignment = linealignment
+      self.xpad = xpad
+      self.ypad = ypad
+      self.fontdesc = fontdesc
+      self.text = text
       self.is_cmd = is_cmd
       self.silent = silent
+
+def CreateDefaultTelopSetting():
+  return TelopSetting(
+      valignment = 'top',
+      halignment = 'left',
+      linealignment = 'left',
+      xpad = '0',
+      ypad = '0',
+      fontdesc = 'Sans 10',
+      text = '')
 
 
 class V4l2ComposerSetting(object):
@@ -106,7 +116,8 @@ class V4l2ComposerSetting(object):
     self.source_height = '480'
     self.source_framerate = '30/1'
     self.sink_device = '/dev/video1'
-    self.telops = [ TelopSetting() for i in xrange(N_TELOP) ]
+    self.telops = [ CreateDefaultTelopSetting() 
+                      for i in xrange(N_TELOPS) ]
     self.frame_svgfile = ''
 
   def Save(self, filename):
@@ -120,10 +131,11 @@ class V4l2ComposerSetting(object):
       with open(filename, "rb") as f:
         o = pickle.load(f)
       if isinstance(o, V4l2ComposerSetting):
-        if len(o.telops) < N_TELOP:
-          o.telops = o.telops + [ TelopSetting() for i in xrange(N_TELOP - len(o.telops)) ]
-        elif len(o.telops) > N_TELOP:
-          o.telops = o.telops[:N_TELOP]
+        if len(o.telops) < N_TELOPS:
+          o.telops = o.telops + [ CreateDefaultTelopSetting()
+                      for i in xrange(N_TELOPS - len(o.telops)) ]
+        elif len(o.telops) > N_TELOPS:
+          o.telops = o.telops[:N_TELOPS]
         return o
       else:
         print("Read the data is not V4l2ComposerSetting type.")
@@ -147,7 +159,7 @@ class V4l2Composer(object):
     #--
     self.camerasource = gst.element_factory_make('v4l2src')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
-    self.textoverlays = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOP) ]
+    self.textoverlays = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOPS) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.monitorsink= gst.element_factory_make('xvimagesink')
     #--
@@ -173,7 +185,7 @@ class V4l2Composer(object):
     ########################
     # v4l2src property
     self.camerasource.set_property('device', self.setting.source_device)
-    self.camerasource.set_property('always-copy', False)
+    #self.camerasource.set_property('always-copy', False)
     #self.camerasource.set_property('queue-size', 4)
     self.camerasource.set_property('blocksize', 65536)
 
@@ -200,12 +212,8 @@ class V4l2Composer(object):
     self.v4l2sink.set_property('sync', False)
 
     # textoverlay
-    for i in xrange(N_TELOP):
-      try:
-        telop_prop = self.setting.telops[i]
-      except IndexError:
-        telop_prop = TelopSetting()
-
+    for i in xrange(N_TELOPS):
+      telop_prop = self.setting.telops[i]
       self.SetTelopAtrribute(i, telop_prop)
       if telop_prop.is_cmd:
         self.SetTelopText(i, "")
@@ -285,15 +293,26 @@ class V4l2Composer(object):
       textoverlay.set_property("text", text)
 
   def SetTelopAtrribute(self, no, telop_prop):
-    textoverlay = self.textoverlays[no]
-    textoverlay.set_property("halignment", telop_prop.halignment)
-    textoverlay.set_property("valignment", telop_prop.valignment)
-    textoverlay.set_property("line-alignment", telop_prop.linealignment)
-    textoverlay.set_property("font-desc", telop_prop.fontdesc)
-    textoverlay.set_property("xpad", int(telop_prop.xpad))
-    textoverlay.set_property("ypad", int(telop_prop.ypad))
-    textoverlay.set_property("silent", telop_prop.silent)
-    textoverlay.set_property("shadow",False)
+    try:
+      textoverlay = self.textoverlays[no]
+    except IndexError:
+      return
+    else:
+      if telop_prop.halignment is not None:
+        textoverlay.set_property("halignment", telop_prop.halignment)
+      if telop_prop.valignment is not None:
+        textoverlay.set_property("valignment", telop_prop.valignment)
+      if telop_prop.linealignment is not None:
+        textoverlay.set_property("line-alignment", telop_prop.linealignment)
+      if telop_prop.fontdesc is not None:
+        textoverlay.set_property("font-desc", telop_prop.fontdesc)
+      if telop_prop.xpad is not None:
+        textoverlay.set_property("xpad", int(telop_prop.xpad))
+      if telop_prop.ypad is not None:
+        textoverlay.set_property("ypad", int(telop_prop.ypad))
+      if telop_prop.silent is not None:
+        textoverlay.set_property("silent", telop_prop.silent)
+      textoverlay.set_property("shadow",False)
 
   # RSvgOverlay
   def SetFrameSvgFile(self, filepath):
@@ -321,7 +340,7 @@ class V4l2Composer(object):
       imagesink.set_property("force-aspect-ratio", True)
       if self.prev_panel:
         gtk.gdk.threads_enter()
-        imagesink.set_xwindow_id(self.prev_panel.window.xid)
+        imagesink.set_xwindow_id(self.prev_panel.window.xid) 
         gtk.gdk.threads_leave()
 
 
@@ -400,7 +419,7 @@ class V4l2ComposerWindow(gtk.Window):
 
     self.setting = setting
     self.player = None
-    self.spawnlist = [None] * N_TELOP
+    self.spawnlist = [None] * N_TELOPS
 
     self.build_window()
     self.set_values()
@@ -497,7 +516,7 @@ class V4l2ComposerWindow(gtk.Window):
     self.cmb_text_idx = gtk.combo_box_new_text()
     self.cmb_text_idx.connect('changed', self.on_cmb_text_idx_changed)
     hbox.pack_start(self.cmb_text_idx, True)
-    for i in xrange(N_TELOP):
+    for i in xrange(N_TELOPS):
       self.cmb_text_idx.append_text(str(i))
 
     hbox.pack_start(gtk.Label("V:"), False)
@@ -726,13 +745,37 @@ class V4l2ComposerWindow(gtk.Window):
 
     if isinstance(parsedata, dict):
       for key in parsedata:
-        try:
+        d = parsedata[key]
+        if key.isdigit():
           idx = int(key)
-        except ValueError:
-          continue
-        else:
-          self.player.SetTelopText(idx, parsedata[key])
-    else:
+          if isinstance(d, dict):
+            ts = TelopSetting()
+            for k in d:
+              if k == 'text':
+                ts.text = d[k]
+              if k == 'silent':
+                ts.silent = d[k]
+            self.player.SetTelopAtrribute(idx, ts)
+          elif isinstance(d, (str, unicode)):
+            self.player.SetTelopText(idx, parsedata[key])
+        elif key == 'framesvg':
+          if os.path.exists(d):
+            self.player.SetFrameSvgFile(d)
+        elif key == 'hides':
+          if isinstance(d, list):
+            for idx in d:
+              idx = int(idx)
+              ts = TelopSetting(silent=True)
+              self.player.SetTelopAtrribute(idx, ts)
+        elif key == 'shows':
+          if isinstance(d, list):
+            for idx in d:
+              idx = int(idx)
+              ts = TelopSetting(silent=False)
+              self.player.SetTelopAtrribute(idx, ts)
+
+
+    elif isinstance(parsedata, (str, unicode)):
       self.player.SetTelopText(idx, text)
 
 
