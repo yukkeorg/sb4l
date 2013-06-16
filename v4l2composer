@@ -34,7 +34,14 @@ import codecs
 import shlex
 import subprocess
 import signal
-import json
+import tempfile
+try:
+  import ujson as json
+except ImportError:
+  try:
+    import simplejson as json
+  except ImportError:
+    import json
 try:
   import cPickle as pickle
 except ImportError:
@@ -312,6 +319,11 @@ class V4l2Composer(object):
         textoverlay.set_property("ypad", int(telop_prop.ypad))
       if telop_prop.silent is not None:
         textoverlay.set_property("silent", telop_prop.silent)
+      if telop_prop.fontdesc is not None:
+        textoverlay.set_property("font-desc", telop_prop.fontdesc)
+      if telop_prop.text is not None:
+        textoverlay.set_property("text", telop_prop.text)
+
       textoverlay.set_property("shadow",False)
 
   # RSvgOverlay
@@ -363,16 +375,12 @@ class SpawnStdoutReader(object):
     except OSError as e:
       print(e.message)
       return
-
     try:
       glib.io_add_watch(self.child.stdout,
                         glib.IO_IN | glib.IO_HUP,
                         self._eventHandler)
     except glib.GError as e:
       self.terminate()
-      print(e.message)
-      return
-
     if self.init_callback:
       self.init_callback(self.callback_args)
 
@@ -381,12 +389,11 @@ class SpawnStdoutReader(object):
       buf = StringIO.StringIO()
       while True:
         data = fd.read(1)
-        if data == "\x00" or data == "":
-          break
         buf.write(data)
+        if data == "\0" or len(data) == 0:
+          break
       if self.read_callback:
-        text = buf.getvalue()
-        self.read_callback(text, self.callback_args)
+        self.read_callback(buf.getvalue(), self.callback_args)
       buf.close()
 
     if condition & glib.IO_HUP:
@@ -409,7 +416,7 @@ class SpawnStdoutReader(object):
 
   def is_running(self):
     if self.child:
-      return (self.child.returncode is None)
+      return bool(self.child.returncode is None)
     return False
 
 
@@ -559,12 +566,12 @@ class V4l2ComposerWindow(gtk.Window):
     hbox2.pack_start(self.chk_text_is_cmdline, False)
 
     self.btn_exec = gtk.Button("Exec")
-    self.btn_exec.connect("clicked", self.on_exec)
-    self.btn_exec.set_sensitive(False)
+    self.btn_exec.connect("clicked", self.on_exec_subprocess)
+    self.btn_exec.set_sensitive(True)
     hbox2.pack_start(self.btn_exec, False)
 
     self.btn_kill = gtk.Button("Kill")
-    self.btn_kill.connect("clicked", self.on_kill)
+    self.btn_kill.connect("clicked", self.on_kill_subprocess)
     self.btn_kill.set_sensitive(False)
     hbox2.pack_start(self.btn_kill, False)
 
@@ -621,19 +628,21 @@ class V4l2ComposerWindow(gtk.Window):
     self.chk_text_is_cmdline.set_active(telop.is_cmd)
     self.chk_silent.set_active(telop.silent)
     self.fontselector.set_font_name(telop.fontdesc)
-    self.btn_kill.set_sensitive(False)
+    self.ent_text.get_buffer().set_text(telop.text)
+
+    isrun = False
     if telop.is_cmd:
       spawn = self.spawnlist[idx]
-      if spawn and spawn.is_running():
-        self.btn_kill.set_sensitive(True)
-    # self.chk_background.set_active(1 if telop.get('shaded-background', False) else 0)
-    self.ent_text.get_buffer().set_text(telop.text)
+      if spawn:
+        isrun = spawn.is_running()
+    self.btn_exec.set_sensitive(not isrun)
+    self.btn_kill.set_sensitive(isrun)
+
 
   def on_update(self, widget, *args):
     idx = self.cmb_text_idx.get_active()
     if idx < 0:
       return
-
     telop = self.setting.telops[idx]
     telop.halignment = self.cmb_text_halign.get_active_text()
     telop.valignment = self.cmb_text_valign.get_active_text()
@@ -644,28 +653,8 @@ class V4l2ComposerWindow(gtk.Window):
     telop.silent = self.chk_silent.get_active()
     telop.fontdesc = self.fontselector.get_font_name()
     telop.text = self.GetTextViewValue(self.ent_text)
-
-    #if self.player:
-    self.player.SetTelopAtrribute(idx, telop)
-
-    if telop.is_cmd:
-      if self.spawnlist[idx]:
-        if self.spawnlist[idx].is_running():
-          return
-        else:
-          self.spawnlist[idx] = None
-      cmdline = shlex.split(telop.text)
-      s = SpawnStdoutReader(cmdline,
-                            init_callback=self.on_init_subprocess,
-                            read_callback=self.on_read_stdout,
-                            term_callback=self.on_term_subprocess,
-                            callback_args=(idx,))
-      s.run()
-      self.spawnlist[idx] = s
-    else:
-      if self.player:
-        t = self.DecolateDisplayFont(idx, telop.text)
-        self.player.SetTelopText(idx, t)
+    if self.player:
+      self.player.SetTelopAtrribute(idx, telop)
 
   def on_camera_startstop(self, widget):
     if widget.get_active():
@@ -686,10 +675,27 @@ class V4l2ComposerWindow(gtk.Window):
       self.player = None
       self.btn_camera_tgl.set_label("Off")
 
-  def on_exec(self, widget):
-    pass
+  def on_exec_subprocess(self, widget):
+    idx = self.cmb_text_idx.get_active()
+    if idx < 0:
+      return
+    telop = self.setting.telops[idx]
+    if telop.is_cmd:
+      if self.spawnlist[idx]:
+        if self.spawnlist[idx].is_running():
+          return
+        else:
+          self.spawnlist[idx] = None
+      cmdline = shlex.split(telop.text)
+      s = SpawnStdoutReader(cmdline,
+                            init_callback=self.on_init_subprocess,
+                            read_callback=self.on_read_pipe,
+                            term_callback=self.on_term_subprocess,
+                            callback_args=None)
+      s.run()
+      self.spawnlist[idx] = s
 
-  def on_kill(self, widget):
+  def on_kill_subprocess(self, widget):
     no = self.cmb_text_idx.get_active()
     sl = self.spawnlist[no]
     if sl and sl.is_running():
@@ -730,57 +736,20 @@ class V4l2ComposerWindow(gtk.Window):
 
   # -- SpawnStdoutReader callbacks
   def on_init_subprocess(self, args):
+    self.btn_exec.set_sensitive(False)
     self.btn_kill.set_sensitive(True)
 
-  def on_read_stdout(self, text, args):
-    (idx, ) = args
+  def on_term_subprocess(self, args):
+    self.btn_exec.set_sensitive(True)
+    self.btn_kill.set_sensitive(False)
+
+  def on_read_pipe(self, texts, args):
     if not self.player:
       return
+    results = jsonProcessor(texts)
+    for idx, ts in results:
+      self.player.SetTelopAtrribute(idx, ts)
 
-    try:
-      parsedata = json.loads(text)
-    except ValueError:
-      self.player.SetTelopText(idx, text)
-      return
-
-    if isinstance(parsedata, dict):
-      for key in parsedata:
-        d = parsedata[key]
-        if key.isdigit():
-          idx = int(key)
-          if isinstance(d, dict):
-            ts = TelopSetting()
-            for k in d:
-              if k == 'text':
-                ts.text = d[k]
-              if k == 'silent':
-                ts.silent = d[k]
-            self.player.SetTelopAtrribute(idx, ts)
-          elif isinstance(d, (str, unicode)):
-            self.player.SetTelopText(idx, parsedata[key])
-        elif key == 'framesvg':
-          if os.path.exists(d):
-            self.player.SetFrameSvgFile(d)
-        elif key == 'hides':
-          if isinstance(d, list):
-            for idx in d:
-              idx = int(idx)
-              ts = TelopSetting(silent=True)
-              self.player.SetTelopAtrribute(idx, ts)
-        elif key == 'shows':
-          if isinstance(d, list):
-            for idx in d:
-              idx = int(idx)
-              ts = TelopSetting(silent=False)
-              self.player.SetTelopAtrribute(idx, ts)
-
-
-    elif isinstance(parsedata, (str, unicode)):
-      self.player.SetTelopText(idx, text)
-
-
-  def on_term_subprocess(self, args):
-    self.btn_kill.set_sensitive(False)
 
   ##########
   #  Misc  #
@@ -791,14 +760,48 @@ class V4l2ComposerWindow(gtk.Window):
     text = buf.get_text(start, end)
     return text
 
-  def DecolateDisplayFont(self, no, text):
+
+def jsonProcessor(texts):
+  result = []
+  def switchGroup(_v, _a):
+    if isinstance(v, list):
+      for _i in _v:
+        try:
+          _i = int(_i)
+        except ValueError:
+          continue
+        else:
+          _ts = TelopSetting(silent=_a)
+          result.append((_i, _ts))
+
+  for text in texts.split("\0"):
     try:
-      p = self.setting.telops[no]
-    except IndexError:
-      return
-    if p.fontdesc != '':
-      text = '<span font="{0}">{1}</span>'.format(p.fontdesc, text)
-    return text
+      parsedata = json.loads(text)
+    except ValueError:
+      continue
+    else:
+      if isinstance(parsedata, dict):
+        for k, v in parsedata.iteritems():
+          if k == 'framesvg':
+            if os.path.exists(v):
+              result.appenda(('framesvg', v))
+          elif k == 'hides':
+            switchGroup(v, True)
+          elif k == 'shows':
+            switchGroup(v, False)
+          else:
+            ts = TelopSetting()
+            if isinstance(d, dict):
+              for k2, v2 in v.iteritems():
+                if k == 'text':
+                  ts.text = v2
+                if k == 'silent':
+                  ts.silent = v2
+              result.append((k, ts))
+            elif isinstance(v, (str, unicode)):
+              ts.text = v
+              result.append((k, ts))
+  return result
 
 
 def main():
