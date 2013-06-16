@@ -9,6 +9,6 @@ ENDY=$((${STARTY} + ${HEIGHT} - 1))
 
 exec \
 gst-launch-0.10 ximagesrc startx=${STARTX} starty=${STARTY} endx=${ENDX} endy=${ENDY} \
-                ! "video/x-raw-rgb,width=${WIDTH},height=${HEIGHT},framerate=24/1" \
+                ! "video/x-raw-rgb,width=${WIDTH},height=${HEIGHT},framerate=15/1" \
                 ! ffmpegcolorspace \
-                ! v4l2sink device=/dev/video2 sync=0 \
+                ! v4l2sink device=/dev/video1 sync=0 \
