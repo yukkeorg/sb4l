@@ -1,21 +1,23 @@
 #!/bin/sh
 BASEDIR=$(dirname "$0")
 
-if [ ${BASEDIR}/config/global ]; then
+if [ -e ${BASEDIR}/config/global ]; then
   . ${BASEDIR}/config/global
 else
   echo "Can't open config file." >2
   exit 1
 fi
 
-# --- Install v4l2loopback module
-if ! grep -q v4l2loopback /proc/modules >/dev/null 2>&1; then
-   # sudo modprobe v4l2loopback use_videostd=0
+check_loaded_kernelmodule() {
+    grep -q v4l2loopback "$1" /proc/modules >/dev/null 2>&1
+}
+
+if ! check_loaded_kernelmodule v4l2loopback; then
    sudo modprobe v4l2loopback ${V4L2LOOPBACK_OPTIONS}
 fi
 
 guvcview -d "${CAMERADEVICE}" -o >/dev/null 2>&1 &
 pavucontrol &
-${BASEDIR}/v4l2composer &
+${BASEDIR}/v4l2mixer &
 
 
