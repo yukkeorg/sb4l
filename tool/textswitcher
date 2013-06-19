@@ -2,6 +2,13 @@
 # coding: utf-8
 
 import sys, os
+try:
+    import ujson as json
+except ImportError:
+    try:
+        import simplejson as json
+    except ImportError:
+        import json
 from gi.repository import GLib, Gio
 
 
@@ -41,21 +48,49 @@ class TextSwitcher(object):
         self.read_filename = filename
         self.default_interval = interval
         self.text_buffer = TextBuffer(eol='\x00')
+        # fade_params 
+        self.ticks = 0
+        self.alpha = 0
+        self.outinterval = (1000.0 / 30)  # ms/frame
+        self.fadetime = 200.0 # ms
+        self.alpha_delta = 256.0 / (self.fadetime / self.outinterval)
+        self.textcolor = (255 << 16) + (255 << 8) + 255
+        self.nowtext = ""
 
     def run(self):
         self.text_buffer.read(self.read_filename)
         f = Gio.File.new_for_path(self.read_filename)
         self.filemonitor = f.monitor_file(Gio.FileMonitorFlags.NONE, None)
         self.filemonitor.connect('changed', self.on_file_changed)
-        GLib.timeout_add(self.default_interval, self.output_text)
+        GLib.timeout_add(self.outinterval, self.output_text)
         try:
             GLib.MainLoop().run()
         except KeyboardInterrupt:
             pass
 
     def output_text(self):
-        sys.stdout.write(self.text_buffer.pull().encode('utf-8'))
-        sys.stdout.flush()
+        isoutput = True
+        if self.ticks == 0:
+            self.nowtext = self.text_buffer.pull().encode('utf-8')
+        elif self.ticks <= self.fadetime:
+            self.alpha += self.alpha_delta
+            self.alpha = min(self.alpha, 255)
+        elif self.ticks >= self.default_interval - self.fadetime:
+            self.alpha -= self.alpha_delta
+            self.alpha = max(self.alpha, 0)
+        else:
+            isoutput = False
+        if isoutput:
+            color = (int(self.alpha) << 24) + self.textcolor # white
+            d = {"1": { "color": color, "text": self.nowtext } }
+            sys.stdout.write(json.dumps(d))
+            sys.stdout.write("\0")
+            sys.stdout.flush()
+        self.ticks += self.outinterval
+        if self.ticks >= self.default_interval:
+            self.ticks = 0
+            self.alpha = 0
+            self.nowtext = self.text_buffer.pull().encode('utf-8')
         return True
 
     def on_file_changed(self, monitor, f, otherfile, event):
