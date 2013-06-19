@@ -2,6 +2,7 @@
 # coding: utf-8
 # vim: expandtab ts=2 sts=2 sw=2
 
+# V4L2 MIXER
 # Copyright (c) 2011-2013, Yusuke Ohshima <createtool@yukke.org>
 # All rights reserved.
 #
@@ -86,11 +87,33 @@ def debugmsg(msg):
  sys.stderr.write(msg+"\n")
 
 
+class Jsonalizer(object):
+  def to_json(self, exclude=None):
+    if exclude is None:
+      d = self.__dict__
+    else:
+      d = dict((k, v) for k, v in self.__dict__ if k not in exclude)
+    pairs = []
+    return json.dumps(pairs)
+
+  def save(self, filename):
+    with open(filename, "wb") as f:
+      f.write(self.to_json())
+
+  def load(self, filename):
+    with open(filename, "rb") as f:
+      d = json.loads(f.read())
+    for k, v in self.__dict__:
+      if k in d:
+        self.__dict__[k] = d[k]
+
+
 class TelopSetting(object):
   def __init__(self,
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
-               is_cmd=False, silent=False, *args, **kw):
+               is_cmd=False, silent=False, color=None, xpos=None,
+               ypos=None, *args, **kw):
       self.valignment = valignment
       self.halignment = halignment
       self.linealignment = linealignment
@@ -100,16 +123,21 @@ class TelopSetting(object):
       self.text = text
       self.is_cmd = is_cmd
       self.silent = silent
+      self.color = color
+      self.xpos = xpos
+      self.ypos = ypos
+
+
 
 def CreateDefaultTelopSetting():
   return TelopSetting(
-      valignment = 'top',
-      halignment = 'left',
-      linealignment = 'left',
-      xpad = '0',
-      ypad = '0',
-      fontdesc = 'Sans 10',
-      text = '')
+      valignment='top',
+      halignment='left',
+      linealignment='left',
+      xpad='0',
+      ypad='0',
+      fontdesc='Sans 10',
+      text='')
 
 
 class V4l2ComposerSetting(object):
@@ -162,7 +190,7 @@ class V4l2Composer(object):
     #################
     # Make Elements #
     #################
-    self.player = gst.Pipeline('V4l2Composer')
+    self.player = gst.Pipeline('V4l2Mixer')
     #--
     self.camerasource = gst.element_factory_make('v4l2src')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
@@ -323,7 +351,12 @@ class V4l2Composer(object):
         textoverlay.set_property("font-desc", telop_prop.fontdesc)
       if telop_prop.text is not None:
         textoverlay.set_property("text", telop_prop.text)
-
+      if telop_prop.color is not None:
+        textoverlay.set_property("color", int(telop_prop.color))
+      if telop_prop.xpos is not None:
+        textoverlay.set_property("xpos", float(telop_prop.xpos))
+      if telop_prop.ypos is not None:
+        textoverlay.set_property("ypos", float(telop_prop.ypos))
       textoverlay.set_property("shadow",False)
 
   # RSvgOverlay
@@ -748,7 +781,10 @@ class V4l2ComposerWindow(gtk.Window):
       return
     results = jsonProcessor(texts)
     for idx, ts in results:
-      self.player.SetTelopAtrribute(idx, ts)
+      try:
+        self.player.SetTelopAtrribute(int(idx), ts)
+      except ValueError:
+        pass
 
 
   ##########
@@ -791,12 +827,14 @@ def jsonProcessor(texts):
             switchGroup(v, False)
           else:
             ts = TelopSetting()
-            if isinstance(d, dict):
+            if isinstance(v, dict):
               for k2, v2 in v.iteritems():
-                if k == 'text':
+                if k2 == 'text':
                   ts.text = v2
-                if k == 'silent':
+                elif k2 == 'silent':
                   ts.silent = v2
+                elif k2 == 'color':
+                  ts.color = int(v2)
               result.append((k, ts))
             elif isinstance(v, (str, unicode)):
               ts.text = v
