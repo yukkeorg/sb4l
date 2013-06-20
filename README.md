@@ -11,7 +11,7 @@ Require Applications
 
 - ffmpeg 1.2 or later (compile with librtmp, libfaac and libx264)
   - https://ffmpeg.org/
-- Gstreamer 0.1 0 (not implimentation for 1.0)
+- Gstreamer 0.10 (not support 1.0, but scheduled supports)
   - http://gstreamer.freedesktop.org/
 - v4l2loopback 0.6.1 or later 
   - https://github.com/umlaeute/v4l2loopback
