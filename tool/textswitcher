@@ -12,6 +12,10 @@ except ImportError:
 from gi.repository import GLib, Gio
 
 
+def RGB(r, g, b):
+    return (r << 16) + (g << 8) + b
+
+
 class TextBuffer(object):
     def __init__(self, eol='\n', encoding=None):
         self.encoding = encoding or 'utf-8'
@@ -44,17 +48,17 @@ class TextBuffer(object):
 
 
 class TextSwitcher(object):
-    def __init__(self, filename, interval=3500):
+    def __init__(self, filename, color=None, fps=30, interval=3500, fadetime=200.0):
         self.read_filename = filename
         self.default_interval = interval
-        self.text_buffer = TextBuffer(eol='\x00')
+        self.text_buffer = TextBuffer(eol='')
         # fade_params 
         self.ticks = 0
         self.alpha = 0
-        self.outinterval = (1000.0 / 30)  # ms/frame
-        self.fadetime = 200.0 # ms
+        self.outinterval = (1000.0 / fps)  # ms/frame
+        self.fadetime = fadetime # ms
         self.alpha_delta = 256.0 / (self.fadetime / self.outinterval)
-        self.textcolor = (255 << 16) + (255 << 8) + 255
+        self.textcolor = RGB(255, 255, 255) if color is None else color
         self.nowtext = ""
 
     def run(self):
@@ -81,16 +85,15 @@ class TextSwitcher(object):
         else:
             isoutput = False
         if isoutput:
-            color = (int(self.alpha) << 24) + self.textcolor # white
+            color = (int(self.alpha) << 24) + self.textcolor
             d = {"1": { "color": color, "text": self.nowtext } }
             sys.stdout.write(json.dumps(d))
             sys.stdout.write("\0")
             sys.stdout.flush()
         self.ticks += self.outinterval
-        if self.ticks >= self.default_interval:
+        if self.ticks > self.default_interval:
             self.ticks = 0
             self.alpha = 0
-            self.nowtext = self.text_buffer.pull().encode('utf-8')
         return True
 
     def on_file_changed(self, monitor, f, otherfile, event):
