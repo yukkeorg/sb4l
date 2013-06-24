@@ -75,12 +75,14 @@ _CCS_HALIGN = {
   'left'   : 0,
   'center' : 1,
   'right'  : 2,
+  'position': 3,
 }
 
 _CCS_VALIGN = {
   'top'    : 0,
   'center' : 1,
   'bottom' : 2,
+  'position' : 3,
 }
 
 def debugmsg(msg):
@@ -112,7 +114,7 @@ class TelopSetting(object):
   def __init__(self,
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
-               is_cmd=False, silent=False, color=None, xpos=None,
+               is_cmd=False, silent=None, color=None, xpos=None,
                ypos=None, *args, **kw):
       self.valignment = valignment
       self.halignment = halignment
@@ -194,7 +196,8 @@ class V4l2Composer(object):
     #--
     self.camerasource = gst.element_factory_make('v4l2src')
     self.framesvg = gst.element_factory_make('rsvgoverlay')
-    self.textoverlays = [ gst.element_factory_make('textoverlay') for i in xrange(N_TELOPS) ]
+    self.textoverlays = [ gst.element_factory_make('textoverlay') 
+                             for i in xrange(N_TELOPS) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
     self.monitorsink= gst.element_factory_make('xvimagesink')
     #--
@@ -218,17 +221,18 @@ class V4l2Composer(object):
     ########################
     # Configuring Elements #
     ########################
-    # v4l2src property
-    self.camerasource.set_property('device', self.setting.source_device)
-    #self.camerasource.set_property('always-copy', False)
-    #self.camerasource.set_property('queue-size', 4)
-    self.camerasource.set_property('blocksize', 65536)
-
-    # caps property
     if self.setting.source_format == "MJPEG":
       fmt = "image/jpeg"
     else:
       fmt = "video/x-raw-yuv"
+
+    # v4l2src property
+    self.camerasource.set_property('device', self.setting.source_device)
+    self.camerasource.set_property('always-copy', False)
+    #self.camerasource.set_property('queue-size', 4)
+    #self.camerasource.set_property('blocksize', 65536)
+
+    # caps property
     srccaps = '{0},width={1},height={2},framerate={3}' \
                .format(fmt,
                        self.setting.source_width,
@@ -341,23 +345,24 @@ class V4l2Composer(object):
         textoverlay.set_property("line-alignment", telop_prop.linealignment)
       if telop_prop.fontdesc is not None:
         textoverlay.set_property("font-desc", telop_prop.fontdesc)
-      if telop_prop.xpad is not None:
-        textoverlay.set_property("xpad", int(telop_prop.xpad))
-      if telop_prop.ypad is not None:
-        textoverlay.set_property("ypad", int(telop_prop.ypad))
       if telop_prop.silent is not None:
         textoverlay.set_property("silent", telop_prop.silent)
       if telop_prop.fontdesc is not None:
         textoverlay.set_property("font-desc", telop_prop.fontdesc)
-      if telop_prop.text is not None:
-        textoverlay.set_property("text", telop_prop.text)
       if telop_prop.color is not None:
         textoverlay.set_property("color", int(telop_prop.color))
+      if telop_prop.text is not None:
+        textoverlay.set_property("text", telop_prop.text)
       if telop_prop.xpos is not None:
         textoverlay.set_property("xpos", float(telop_prop.xpos))
       if telop_prop.ypos is not None:
         textoverlay.set_property("ypos", float(telop_prop.ypos))
+      if telop_prop.xpad is not None:
+        textoverlay.set_property("xpad", int(telop_prop.xpad))
+      if telop_prop.ypad is not None:
+        textoverlay.set_property("ypad", int(telop_prop.ypad))
       textoverlay.set_property("shadow",False)
+      textoverlay.set_property("outline-color", 0)
 
   # RSvgOverlay
   def SetFrameSvgFile(self, filepath):
@@ -398,6 +403,7 @@ class SpawnStdoutReader(object):
     self.read_callback = read_callback
     self.term_callback = term_callback
     self.callback_args = callback_args
+    self.isuse = False
     self.child = None
 
   def run(self):
@@ -414,8 +420,9 @@ class SpawnStdoutReader(object):
                         self._eventHandler)
     except glib.GError as e:
       self.terminate()
-    if self.init_callback:
+    if self.init_callback is not None:
       self.init_callback(self.callback_args)
+    self.isuse = True
 
   def _eventHandler(self, fd, condition):
     if condition & glib.IO_IN:
@@ -425,31 +432,32 @@ class SpawnStdoutReader(object):
         buf.write(data)
         if data == "\0" or len(data) == 0:
           break
-      if self.read_callback:
+      if self.read_callback is not None:
         self.read_callback(buf.getvalue(), self.callback_args)
       buf.close()
 
     if condition & glib.IO_HUP:
       if self.child:
         self.child.poll()
-        if self.term_callback:
+        if self.term_callback is not None:
           self.term_callback(self.callback_args)
+        self.isuse = False
         return False
     return True
 
   def getpid(self):
     pid = -1
-    if self.child:
+    if self.isuse and self.child:
       pid = self.child.pid
     return pid
 
   def terminate(self):
-    if self.child:
+    if self.isuse and self.child:
       self.child.terminate()
 
   def is_running(self):
-    if self.child:
-      return bool(self.child.returncode is None)
+    if self.isuse and self.child:
+      return (self.child.returncode is None)
     return False
 
 
@@ -565,6 +573,7 @@ class V4l2ComposerWindow(gtk.Window):
     self.cmb_text_valign.append_text("top")
     self.cmb_text_valign.append_text("center")
     self.cmb_text_valign.append_text("bottom")
+    self.cmb_text_valign.append_text("position")
 
     hbox.pack_start(gtk.Label("H:"), False)
     self.cmb_text_halign = gtk.combo_box_new_text()
@@ -572,6 +581,7 @@ class V4l2ComposerWindow(gtk.Window):
     self.cmb_text_halign.append_text("left")
     self.cmb_text_halign.append_text("center")
     self.cmb_text_halign.append_text("right")
+    self.cmb_text_halign.append_text("position")
 
     hbox.pack_start(gtk.Label("Line:"), False)
     self.cmb_text_lalign = gtk.combo_box_new_text()
@@ -596,6 +606,7 @@ class V4l2ComposerWindow(gtk.Window):
 
     self.chk_text_is_cmdline = gtk.CheckButton("Command")
     self.chk_text_is_cmdline.set_alignment(0, 0)
+    self.chk_text_is_cmdline.connect("clicked", self.on_is_cmdline_clicked)
     hbox2.pack_start(self.chk_text_is_cmdline, False)
 
     self.btn_exec = gtk.Button("Exec")
@@ -646,50 +657,7 @@ class V4l2ComposerWindow(gtk.Window):
 
   # -- Callback for events
 
-  def on_cmb_text_idx_changed(self, widget):
-    idx = widget.get_active()
-    try:
-      telop = self.setting.telops[idx]
-    except IndexError:
-      return
-
-    self.cmb_text_halign.set_active(_CCS_HALIGN.get(telop.halignment, 0))
-    self.cmb_text_valign.set_active(_CCS_VALIGN.get(telop.valignment, 0))
-    self.cmb_text_lalign.set_active(_CCS_HALIGN.get(telop.linealignment, 0))
-    self.ent_text_xpad.set_text(str(telop.xpad))
-    self.ent_text_ypad.set_text(str(telop.ypad))
-    self.chk_text_is_cmdline.set_active(telop.is_cmd)
-    self.chk_silent.set_active(telop.silent)
-    self.fontselector.set_font_name(telop.fontdesc)
-    self.ent_text.get_buffer().set_text(telop.text)
-
-    isrun = False
-    if telop.is_cmd:
-      spawn = self.spawnlist[idx]
-      if spawn:
-        isrun = spawn.is_running()
-    self.btn_exec.set_sensitive(not isrun)
-    self.btn_kill.set_sensitive(isrun)
-
-
-  def on_update(self, widget, *args):
-    idx = self.cmb_text_idx.get_active()
-    if idx < 0:
-      return
-    telop = self.setting.telops[idx]
-    telop.halignment = self.cmb_text_halign.get_active_text()
-    telop.valignment = self.cmb_text_valign.get_active_text()
-    telop.linealignment = self.cmb_text_lalign.get_active_text()
-    telop.xpad = int(self.ent_text_xpad.get_text())
-    telop.ypad = int(self.ent_text_ypad.get_text())
-    telop.is_cmd = self.chk_text_is_cmdline.get_active()
-    telop.silent = self.chk_silent.get_active()
-    telop.fontdesc = self.fontselector.get_font_name()
-    telop.text = self.GetTextViewValue(self.ent_text)
-    if self.player:
-      self.player.SetTelopAtrribute(idx, telop)
-
-  def on_camera_startstop(self, widget):
+  def on_camera_startstop(self, widget, *args):
     if widget.get_active():
       self.setting.source_device = self.ent_camera_src.get_text()
       self.setting.source_format = self.cmb_camera_fmt.get_active_text()
@@ -705,14 +673,82 @@ class V4l2ComposerWindow(gtk.Window):
       self.btn_camera_tgl.set_label("On")
     else:
       self.player.Stop()
-      self.player = None
       self.btn_camera_tgl.set_label("Off")
+
+  def on_cmb_text_idx_changed(self, widget):
+    idx = widget.get_active()
+    try:
+      telop = self.setting.telops[idx]
+    except IndexError:
+      return
+    self.cmb_text_halign.set_active(_CCS_HALIGN.get(telop.halignment, 0))
+    self.cmb_text_valign.set_active(_CCS_VALIGN.get(telop.valignment, 0))
+    self.cmb_text_lalign.set_active(_CCS_HALIGN.get(telop.linealignment, 0))
+    self.ent_text_xpad.set_text(str(telop.xpad))
+    self.ent_text_ypad.set_text(str(telop.ypad))
+    self.chk_text_is_cmdline.set_active(telop.is_cmd)
+    self.chk_silent.set_active(telop.silent)
+    self.fontselector.set_font_name(telop.fontdesc)
+    self.ent_text.get_buffer().set_text(telop.text)
+
+    isrun = False
+    spawn = self.spawnlist[idx]
+    if spawn is not None:
+      isrun = spawn.is_running()
+    if isrun == False and telop.is_cmd == False:
+      self.btn_exec.set_sensitive(False)
+      self.btn_kill.set_sensitive(False)
+    else:
+      self.btn_exec.set_sensitive(not isrun)
+      self.btn_kill.set_sensitive(isrun)
+
+  def on_is_cmdline_clicked(self, widget, *args):
+    idx = self.cmb_text_idx.get_active()
+    if idx < 0:
+      return
+    isrun = False
+    is_cmd = widget.get_active()
+    spawn = self.spawnlist[idx]
+    if spawn is not None:
+      isrun = spawn.is_running()
+    if isrun == False and is_cmd == False:
+      self.btn_exec.set_sensitive(False)
+      self.btn_kill.set_sensitive(False)
+    else:
+      self.btn_exec.set_sensitive(not isrun)
+      self.btn_kill.set_sensitive(isrun)
+
+  def on_update(self, widget, *args):
+    idx = self.cmb_text_idx.get_active()
+    if idx < 0:
+      return
+    telop = TelopSetting()
+    telop.halignment = self.cmb_text_halign.get_active_text()
+    telop.valignment = self.cmb_text_valign.get_active_text()
+    telop.linealignment = self.cmb_text_lalign.get_active_text()
+    x = int(self.ent_text_xpad.get_text())
+    telop.xpos = float(x) / float(self.setting.source_width)
+    telop.xpad = x
+    y = int(self.ent_text_ypad.get_text())
+    telop.ypos = float(y) / float(self.setting.source_height)
+    telop.ypad = y
+    telop.is_cmd = self.chk_text_is_cmdline.get_active()
+    telop.silent = self.chk_silent.get_active()
+    telop.fontdesc = self.fontselector.get_font_name()
+    if telop.is_cmd == False:
+      telop.text = self.GetTextViewValue(self.ent_text)
+    if self.player:
+      self.player.SetTelopAtrribute(idx, telop)
+    telop.text = self.GetTextViewValue(self.ent_text)
+    self.setting.telops[idx] = telop
 
   def on_exec_subprocess(self, widget):
     idx = self.cmb_text_idx.get_active()
     if idx < 0:
       return
     telop = self.setting.telops[idx]
+    telop.is_cmd = self.chk_text_is_cmdline.get_active()
+    telop.text = self.GetTextViewValue(self.ent_text)
     if telop.is_cmd:
       if self.spawnlist[idx]:
         if self.spawnlist[idx].is_running():
@@ -735,6 +771,19 @@ class V4l2ComposerWindow(gtk.Window):
       debugmsg("Terminated subprocess: {0}.".format(sl.getpid()))
       sl.terminate()
 
+  def on_font_set(self, widget):
+    font_name = widget.get_font_name()
+    debugmsg("Set font is '{0}'.".format(font_name))
+
+  def on_setframe_fileset(self, widget, *args):
+    filepath = widget.get_filename()
+    if self.player:
+      self.player.SetFrameSvgFile(filepath)
+    self.setting.frame_svgfile = filepath
+    debugmsg("load frame svg file: {0}".format(filepath))
+
+  # -----
+
   def on_delete(self, widget, *args):
     debugmsg("OnDelete is called.")
     if self.player:
@@ -747,18 +796,6 @@ class V4l2ComposerWindow(gtk.Window):
   def on_destroy(self, widget, *args):
     debugmsg("OnDestroy is called.")
     gtk.main_quit()
-
-  def on_font_set(self, widget):
-    font_name = widget.get_font_name()
-    debugmsg("Set font is '{0}'.".format(font_name))
-
-  def on_setframe_fileset(self, widget, *args):
-    filepath = widget.get_filename()
-    if self.player:
-      self.player.SetFrameSvgFile(filepath)
-    self.setting.frame_svgfile = filepath
-    debugmsg("load frame svg file: {0}".format(filepath))
-
 
   # -- External
   def on_webcamcomposer_error(self, message):
