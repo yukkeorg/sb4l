@@ -3,8 +3,9 @@
 Simple Broadcast tools For Linux (sb4l)
 =========================================
 
-sb4l is a very simple broadcasting tools with Shellscript and Python.
-This tools works, require other open source softwares and libraries. please see below.
+sb4l is a very simple broadcasting tools with Shellscript and Python.  
+This tools works, require other open source softwares and libraries.   
+please see below.
 
 Required Software
 -----------------
