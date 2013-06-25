@@ -1,13 +1,13 @@
 <!-- vim: set noet ts=2 sts=2 sw=2 ft=markdown : -->
 
-Simple Broadcast Tool For Linux (sb4l)
+Simple Broadcast tools For Linux (sb4l)
 =========================================
 
-swbt4l is a very simple broadcasting tools with Shellscript and Python.
-This tools works, require other open source softwares. please see below.
+sb4l is a very simple broadcasting tools with Shellscript and Python.
+This tools works, require other open source softwares and libraries. please see below.
 
-Require Applications
---------------------
+Required Software
+-----------------
 
 - ffmpeg 1.2 or later (compile with librtmp, libfaac and libx264)
   - https://ffmpeg.org/
@@ -20,8 +20,8 @@ Require Applications
 - Python 2.7 (without 3.x)
   - http://www.python.org/
 
-Require Python Modules
-----------------------
+Required Python libraries
+-------------------------
 
 - gst-python
   - http://gstreamer.freedesktop.org/modules/gst-python.html
