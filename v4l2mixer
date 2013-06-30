@@ -115,20 +115,25 @@ class TelopSetting(object):
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
                is_cmd=False, silent=None, color=None, xpos=None,
-               ypos=None, *args, **kw):
-      self.valignment = valignment
-      self.halignment = halignment
-      self.linealignment = linealignment
-      self.xpad = xpad
-      self.ypad = ypad
-      self.fontdesc = fontdesc
-      self.text = text
-      self.is_cmd = is_cmd
-      self.silent = silent
-      self.color = color
-      self.xpos = xpos
-      self.ypos = ypos
+               ypos=None, alpha=None, *args, **kw):
+    self.valignment = valignment
+    self.halignment = halignment
+    self.linealignment = linealignment
+    self.xpad = xpad
+    self.ypad = ypad
+    self.fontdesc = fontdesc
+    self.text = text
+    self.is_cmd = is_cmd
+    self.silent = silent
+    self.color = color
+    self.xpos = xpos
+    self.ypos = ypos
+    self.alpha = alpha
 
+  def update_from_dict(self, d):
+    for k in d:
+      if k in self.__dict__:
+        self.__dict__[k] = d[k]
 
 
 def CreateDefaultTelopSetting():
@@ -164,21 +169,26 @@ class V4l2ComposerSetting(object):
 
   @staticmethod
   def Load(filename):
-    try:
-      with open(filename, "rb") as f:
-        o = pickle.load(f)
-      if isinstance(o, V4l2ComposerSetting):
-        if len(o.telops) < N_TELOPS:
-          o.telops = o.telops + [ CreateDefaultTelopSetting()
-                      for i in xrange(N_TELOPS - len(o.telops)) ]
-        elif len(o.telops) > N_TELOPS:
-          o.telops = o.telops[:N_TELOPS]
-        return o
-      else:
-        print("Read the data is not V4l2ComposerSetting type.")
-        return V4l2ComposerSetting()
-    except:
-      return V4l2ComposerSetting()
+    obj = V4l2ComposerSetting()
+    with open(filename, "rb") as f:
+      o = pickle.load(f)
+      if not isinstance(o, V4l2ComposerSetting):
+        return obj
+
+      for k in ('source_device', 'source_format', 'source_width',
+                'source_height', 'source_framerate', 'sink_device',
+                'frame_svgfile'):
+        try:
+          obj.__dict__[k] = o.__dict__[k]
+        except:
+          sys.stderr.write("s."+k+"\n")
+      for i in range(len(obj.telops)):
+        for k in obj.telops[i].__dict__:
+          try:
+            obj.telops[i].__dict__[k] = o.telops[i].__dict__[k]
+          except:
+            sys.stderr.write("s.telops[{0}].{1}".format((i, k))+"\n")
+    return obj
 
 
 class V4l2Composer(object):
@@ -254,10 +264,8 @@ class V4l2Composer(object):
     for i in xrange(N_TELOPS):
       telop_prop = self.setting.telops[i]
       self.SetTelopAtrribute(i, telop_prop)
-      if telop_prop.is_cmd:
-        self.SetTelopText(i, "")
-      else:
-        self.SetTelopText(i, telop_prop.text)
+      text = "" if telop_prop.is_cmd else telop_prop.text
+      self.SetTelopText(i, text) 
 
     # rsvgoverlay
     self.framesvg.set_property("location", self.setting.frame_svgfile)
@@ -314,13 +322,16 @@ class V4l2Composer(object):
 
   # Controller for Pipeline
   def Play(self):
-    self.player.set_state(gst.STATE_PLAYING)
+    if self.player is not None:
+      self.player.set_state(gst.STATE_PLAYING)
 
   def Pause(self):
-    self.player.set_state(gst.STATE_PAUSED)
+    if self.player is not None:
+      self.player.set_state(gst.STATE_PAUSED)
 
   def Stop(self):
-    self.player.set_state(gst.STATE_NULL)
+    if self.player is not None:
+      self.player.set_state(gst.STATE_NULL)
 
   # TextOverlay
   def SetTelopText(self, no, text):
@@ -346,7 +357,7 @@ class V4l2Composer(object):
       if telop_prop.fontdesc is not None:
         textoverlay.set_property("font-desc", telop_prop.fontdesc)
       if telop_prop.silent is not None:
-        textoverlay.set_property("silent", telop_prop.silent)
+        textoverlay.set_property("silent", bool(telop_prop.silent))
       if telop_prop.fontdesc is not None:
         textoverlay.set_property("font-desc", telop_prop.fontdesc)
       if telop_prop.color is not None:
@@ -361,6 +372,12 @@ class V4l2Composer(object):
         textoverlay.set_property("xpad", int(telop_prop.xpad))
       if telop_prop.ypad is not None:
         textoverlay.set_property("ypad", int(telop_prop.ypad))
+      if telop_prop.alpha is not None:
+        now_color = textoverlay.get_property("color")
+        alpha = min(telop_prop.alpha, 0xff)
+        color = (alpha << 24) + (now_color & 0x00ffffff)
+        textoverlay.set_property("color", int(color))
+
       textoverlay.set_property("shadow",False)
       textoverlay.set_property("outline-color", 0)
 
@@ -372,10 +389,9 @@ class V4l2Composer(object):
   # Callbacks #
   #############
   def on_message(self, bus, message):
-    type = message.type
-    if type == gst.MESSAGE_EOS:
+    if message.type == gst.MESSAGE_EOS:
       self.Stop()
-    elif type == gst.MESSAGE_ERROR:
+    elif message.type == gst.MESSAGE_ERROR:
       self.Stop()
       msg = message.parse_error()
       if self.on_err_callback and callable(self.on_err_callback):
@@ -461,7 +477,7 @@ class SpawnStdoutReader(object):
     return False
 
 
-class V4l2ComposerWindow(gtk.Window):
+class V4l2MixerWindow(gtk.Window):
   def __init__(self, setting):
     gtk.Window.__init__(self, gtk.WINDOW_TOPLEVEL)
 
@@ -530,7 +546,7 @@ class V4l2ComposerWindow(gtk.Window):
     hbox.pack_start(self.ent_sink, False)
 
     self.btn_camera_tgl = gtk.ToggleButton("Off")
-    self.btn_camera_tgl.connect("toggled", self.on_camera_startstop)
+    self.btn_camera_tgl.connect("toggled", self.on_camera_switch_clicked)
     hbox.pack_start(self.btn_camera_tgl, True)
 
     self.movie_window = gtk.DrawingArea()
@@ -547,7 +563,7 @@ class V4l2ComposerWindow(gtk.Window):
 
     hbox.pack_start(gtk.Label("Frame SVG :"), False)
     self.setframe_btn = gtk.FileChooserButton("Set Frame from SVG")
-    self.setframe_btn.connect("file-set", self.on_setframe_fileset)
+    self.setframe_btn.connect("file-set", self.on_setframe_changed)
     hbox.pack_start(self.setframe_btn, True)
 
     return vbox
@@ -610,23 +626,23 @@ class V4l2ComposerWindow(gtk.Window):
     hbox2.pack_start(self.chk_text_is_cmdline, False)
 
     self.btn_exec = gtk.Button("Exec")
-    self.btn_exec.connect("clicked", self.on_exec_subprocess)
+    self.btn_exec.connect("clicked", self.on_execsubproc_clicked)
     self.btn_exec.set_sensitive(True)
     hbox2.pack_start(self.btn_exec, False)
 
     self.btn_kill = gtk.Button("Kill")
-    self.btn_kill.connect("clicked", self.on_kill_subprocess)
+    self.btn_kill.connect("clicked", self.on_killsubproc_clicked)
     self.btn_kill.set_sensitive(False)
     hbox2.pack_start(self.btn_kill, False)
 
     hbox2.pack_start(gtk.Label("Display Font:"), False)
     self.fontselector = gtk.FontButton();
-    self.fontselector.connect("font-set", self.on_font_set)
+    self.fontselector.connect("font-set", self.on_fontset_changed)
     hbox2.pack_start(self.fontselector, False)
 
     self.btn_update = gtk.Button("Update")
     self.btn_update.set_property("width-request", 200)
-    self.btn_update.connect("clicked", self.on_update)
+    self.btn_update.connect("clicked", self.on_update_clicked)
     hbox2.pack_end(self.btn_update, False)
 
     self.chk_silent = gtk.CheckButton("Silent")
@@ -657,7 +673,7 @@ class V4l2ComposerWindow(gtk.Window):
 
   # -- Callback for events
 
-  def on_camera_startstop(self, widget, *args):
+  def on_camera_switch_clicked(self, widget, *args):
     if widget.get_active():
       self.setting.source_device = self.ent_camera_src.get_text()
       self.setting.source_format = self.cmb_camera_fmt.get_active_text()
@@ -718,7 +734,7 @@ class V4l2ComposerWindow(gtk.Window):
       self.btn_exec.set_sensitive(not isrun)
       self.btn_kill.set_sensitive(isrun)
 
-  def on_update(self, widget, *args):
+  def on_update_clicked(self, widget, *args):
     idx = self.cmb_text_idx.get_active()
     if idx < 0:
       return
@@ -742,7 +758,7 @@ class V4l2ComposerWindow(gtk.Window):
     telop.text = self.GetTextViewValue(self.ent_text)
     self.setting.telops[idx] = telop
 
-  def on_exec_subprocess(self, widget):
+  def on_execsubproc_clicked(self, widget):
     idx = self.cmb_text_idx.get_active()
     if idx < 0:
       return
@@ -764,28 +780,26 @@ class V4l2ComposerWindow(gtk.Window):
       s.run()
       self.spawnlist[idx] = s
 
-  def on_kill_subprocess(self, widget):
+  def on_killsubproc_clicked(self, widget):
     no = self.cmb_text_idx.get_active()
     sl = self.spawnlist[no]
     if sl and sl.is_running():
       debugmsg("Terminated subprocess: {0}.".format(sl.getpid()))
       sl.terminate()
 
-  def on_font_set(self, widget):
+  def on_fontset_changed(self, widget):
     font_name = widget.get_font_name()
     debugmsg("Set font is '{0}'.".format(font_name))
 
-  def on_setframe_fileset(self, widget, *args):
+  def on_setframe_changed(self, widget, *args):
     filepath = widget.get_filename()
     if self.player:
       self.player.SetFrameSvgFile(filepath)
     self.setting.frame_svgfile = filepath
     debugmsg("load frame svg file: {0}".format(filepath))
 
-  # -----
-
+  # -- MainWindow signals
   def on_delete(self, widget, *args):
-    debugmsg("OnDelete is called.")
     if self.player:
       self.player.Stop()
     for s in self.spawnlist:
@@ -794,7 +808,6 @@ class V4l2ComposerWindow(gtk.Window):
     return False
 
   def on_destroy(self, widget, *args):
-    debugmsg("OnDestroy is called.")
     gtk.main_quit()
 
   # -- External
@@ -823,10 +836,7 @@ class V4l2ComposerWindow(gtk.Window):
       except ValueError:
         pass
 
-
-  ##########
-  #  Misc  #
-  ##########
+  # -- Misc
   def GetTextViewValue(self, textview):
     buf = textview.get_buffer()
     start, end = buf.get_bounds()
@@ -847,42 +857,33 @@ def jsonProcessor(texts):
           _ts = TelopSetting(silent=_a)
           result.append((_i, _ts))
 
-  for text in texts.split("\0"):
+  for text in texts.split(u'\0'):
     try:
       parsedata = json.loads(text)
     except ValueError:
       continue
     else:
-      if isinstance(parsedata, dict):
-        for k, v in parsedata.iteritems():
-          if k == 'framesvg':
-            if os.path.exists(v):
-              result.appenda(('framesvg', v))
-          elif k == 'hides':
-            switchGroup(v, True)
-          elif k == 'shows':
-            switchGroup(v, False)
-          else:
-            ts = TelopSetting()
-            if isinstance(v, dict):
-              for k2, v2 in v.iteritems():
-                if k2 == 'text':
-                  ts.text = v2
-                elif k2 == 'silent':
-                  ts.silent = v2
-                elif k2 == 'color':
-                  ts.color = int(v2)
-              result.append((k, ts))
-            elif isinstance(v, (str, unicode)):
-              ts.text = v
-              result.append((k, ts))
+      if not isinstance(parsedata, dict):
+        continue
+      for k, v in parsedata.iteritems():
+        if k == u'framesvg':
+          if os.path.exists(v):
+            result.append((u'framesvg', v))
+        elif k == 'hides':
+          switchGroup(v, True)
+        elif k == 'shows':
+          switchGroup(v, False)
+        elif isinstance(v, dict):
+          ts = TelopSetting()
+          ts.update_from_dict(v)
+          result.append((k, ts))
   return result
 
 
 def main():
   gtk.gdk.threads_init()
   setting = V4l2ComposerSetting.Load(SETTING_FILENAME)
-  cm = V4l2ComposerWindow(setting)
+  cm = V4l2MixerWindow(setting)
   try:
     gtk.main()
   except:
