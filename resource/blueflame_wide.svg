@@ -24,16 +24,16 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="2.8101721"
-     inkscape:cx="174.34661"
-     inkscape:cy="608.87448"
+     inkscape:zoom="2.6100136"
+     inkscape:cx="368.16987"
+     inkscape:cy="663.60195"
      inkscape:document-units="px"
      inkscape:current-layer="g2324"
      showgrid="true"
      inkscape:window-width="1386"
      inkscape:window-height="981"
-     inkscape:window-x="134"
-     inkscape:window-y="73"
+     inkscape:window-x="532"
+     inkscape:window-y="63"
      inkscape:window-maximized="0"
      showguides="true"
      inkscape:snap-global="true">
@@ -871,19 +871,11 @@
       <stop
          id="stop4121"
          offset="0"
-         style="stop-color:#17739f;stop-opacity:1" />
+         style="stop-color:#2ca02c;stop-opacity:1" />
       <stop
-         style="stop-color:#000000;stop-opacity:1"
-         offset="1"
-         id="stop4123" />
-      <stop
-         id="stop4125"
-         offset="1"
-         style="stop-color:#171717;stop-opacity:1" />
-      <stop
-         style="stop-color:#212121;stop-opacity:1"
-         offset="1"
-         id="stop4127" />
+         style="stop-color:#008000;stop-opacity:1"
+         offset="0.64935058"
+         id="stop2565" />
       <stop
          style="stop-color:#000000;stop-opacity:1"
          offset="1"
