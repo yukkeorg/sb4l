@@ -830,11 +830,14 @@ class V4l2MixerWindow(gtk.Window):
     if not self.player:
       return
     results = jsonProcessor(texts)
-    for idx, ts in results:
-      try:
-        self.player.SetTelopAtrribute(int(idx), ts)
-      except ValueError:
-        pass
+    for key, val in results:
+      if key == "framesvg":
+        self.player.SetFrameSvgFile(val)
+      else:
+        try:
+          self.player.SetTelopAtrribute(int(key), val)
+        except ValueError:
+          pass
 
   # -- Misc
   def GetTextViewValue(self, textview):
