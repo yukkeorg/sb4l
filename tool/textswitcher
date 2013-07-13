@@ -48,7 +48,7 @@ class TextBuffer(object):
 
 
 class TextSwitcher(object):
-    def __init__(self, filename, color=None, fps=30, interval=3500, fadetime=200.0):
+    def __init__(self, filename, color=None, fps=30, interval=3000, fadetime=180.0):
         self.read_filename = filename
         self.default_interval = interval
         self.text_buffer = TextBuffer(eol='')
@@ -60,6 +60,8 @@ class TextSwitcher(object):
         self.alpha_delta = 256.0 / (self.fadetime / self.outinterval)
         self.textcolor = RGB(255, 255, 255) if color is None else color
         self.nowtext = ""
+        self.nowinterval = 0
+        self.check = False
 
     def run(self):
         self.text_buffer.read(self.read_filename)
@@ -75,15 +77,32 @@ class TextSwitcher(object):
     def output_text(self):
         isoutput = True
         if self.ticks == 0:
-            self.nowtext = self.text_buffer.pull().encode('utf-8')
+            while True:
+                text = self.text_buffer.pull()
+                items = text.split(u'|')
+                if len(items) == 1:
+                    self.nowtext = items[0]
+                    self.nowinterval = self.default_interval
+                    break
+                elif len(items) == 2:
+                    try:
+                        self.nowinterval = int(items[0])
+                    except ValueError:
+                        self.nowinterval = self.default_interval
+                    self.nowtext = items[1]
+                    break
         elif self.ticks <= self.fadetime:
             self.alpha += self.alpha_delta
             self.alpha = min(self.alpha, 255)
-        elif self.ticks >= self.default_interval - self.fadetime:
+        elif self.ticks >= self.nowinterval - self.fadetime:
             self.alpha -= self.alpha_delta
             self.alpha = max(self.alpha, 0)
         else:
-            isoutput = False
+            if self.check:
+                isoutput = False
+            else:
+                self.alpha = 255
+                self.check = True
         if isoutput:
             color = (int(self.alpha) << 24) + self.textcolor
             d = {"1": { "color": color, "text": self.nowtext } }
@@ -91,9 +110,10 @@ class TextSwitcher(object):
             sys.stdout.write("\0")
             sys.stdout.flush()
         self.ticks += self.outinterval
-        if self.ticks > self.default_interval:
+        if self.ticks > self.nowinterval:
             self.ticks = 0
             self.alpha = 0
+            self.check = False
         return True
 
     def on_file_changed(self, monitor, f, otherfile, event):
