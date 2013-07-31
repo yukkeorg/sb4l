@@ -1,15 +1,15 @@
 # FOR Niconama
-
-# Encode H.264 Video Codec Parameters
-# ===================================
-# Service time
 NOWTIME=$(date +%-H%M)
+
+# H.264コーデックパラメータ
+# ===================================
+FPS=${FPS:-30}
+# サービスタイム(2:00 - 19:30)は、画像のビットレートを上げる
 if [ "200" -le "$NOWTIME" -a "$NOWTIME" -le "1930" ]; then
   VBITRATE="430"
 else
   VBITRATE="330"
 fi
-FPS="30"
 
 VCODEC_OPTS="-vcodec libx264
              -preset slow
@@ -19,7 +19,6 @@ VCODEC_OPTS="-vcodec libx264
              -8x8dct 1
              -maxrate:v ${VBITRATE}k
              -bufsize:v $(( ${VBITRATE} * 2 ))k
-             -flags +loop
              -crf 20
              -trellis 2
              -g $(( ${FPS} * 10 ))
@@ -43,30 +42,33 @@ VCODEC_OPTS="-vcodec libx264
              -rc-lookahead ${FPS}
              -x264opts ipratio=1.41"
 
-# Encode AAC Audio Codec Parameters
-# =================================
-
-#Using libfaac
-#ASAMPLINGRATE="44100"
-#ABITRATE="96"
-#ACHANNEL="2"
-#ACODEC_OPTS="-acodec libfaac -ar ${ASAMPLINGRATE} -ab ${ABITRATE}k -ac ${ACHANNEL}"
-
-#Using libfdk_aac
+# AAC コーデックパラメータ
+# ========================
 ASAMPLINGRATE="44100"
 ABITRATE="48"
 ACHANNEL="2"
-ACODEC_OPTS="-acodec libaacplus 
+
+# Use aacplus library
+# ACODEC_OPTS="-acodec libaacplus 
+#              -ar ${ASAMPLINGRATE} 
+#              -ab ${ABITRATE}k 
+#              -ac ${ACHANNEL}"
+
+# Use fdk_aac library
+ACODEC_OPTS="-acodec libfdk_aac
+             -profile:a aac_he 
              -ar ${ASAMPLINGRATE} 
              -ab ${ABITRATE}k 
              -ac ${ACHANNEL}"
-#ACODEC_OPTS="-acodec libfdk_aac
-#             -profile:a aac_he 
+
+# Use faac library
+#ACODEC_OPTS="-acodec libfaac 
 #             -ar ${ASAMPLINGRATE} 
 #             -ab ${ABITRATE}k 
 #             -ac ${ACHANNEL}"
 
-# Mux FLV Container Parameters
+
+# FLVコンテナパラメータ
 # ===============================
 # ニコ生で配信する場合はピクセルフォーマットをyuv420pにすること。
 # yuv422などのピクセルフォーマットは対応していないため、配信開始から
@@ -78,7 +80,10 @@ OUTPUT_OPTS="-f flv
              -filter:v unsharp=3:3:0:3:3:0
              -s ${OUTPUT_SIZE}"
 
-# Output RTMP Communication Protocol Parameters
-# =============================================
+
+# RTMPパラメータ
+# =============
 RTMPPARAMS=""
 #RTMPPARAMS="flashVer=FME/3.0 swfUrl=@@RTMPURI@@"
+
+
