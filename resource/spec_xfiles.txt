@@ -1,4 +1,4 @@
-6000|CR X-FILES <small>宇宙人帰還計画 ST80</small>
+60000|CR X-FILES <small>宇宙人帰還計画 ST80</small>
 ■スペック■
 [メーカー]  SANKYO <small>(2011年7月導入開始)</small>
 [大当確率]  <small>(低)</small>1/25<small>.01</small>   <small>(高)</small>1/25
