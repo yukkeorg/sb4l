@@ -4,8 +4,7 @@
 # =========
 # This is script which broadcast with ffmpeg.
 # Sorry, this is for Linix only.
-# 
-# Required extra tools:
+# # Required extra tools:
 #  - ffmpeg ver.N-37669 or later (compiling with librtmp, libx264 and libfaac)
 # 
 
@@ -48,7 +47,7 @@ FFMPEGFULLCOMMAND="${FFMPEG}
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV}
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV}
        ${VCODEC_OPTS} ${ACODEC_OPTS} \
-       ${OUTPUT_OPTS} \"${FULL_OUTPUT_URI}\""
+       ${OUTPUT_OPTS} ${FULL_OUTPUT_URI}"
 /bin/echo -e "FFMPEG Command:\n" $FFMPEGFULLCOMMAND
 exec $FFMPEGFULLCOMMAND
 
