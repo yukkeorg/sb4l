@@ -2,13 +2,16 @@
 
 STARTX="${1:-0}"
 STARTY="${2:-0}"
-WIDTH="${3:-800}"
-HEIGHT="${4:-600}"
+WIDTH="${3:-1024}"
+HEIGHT="${4:-768}"
+FRAMERATE="${5:-15/1}"
+SINKDEV="${6:-/dev/video1}"
 ENDX=$((${STARTX} + ${WIDTH} - 1))
 ENDY=$((${STARTY} + ${HEIGHT} - 1))
 
 exec \
-gst-launch-0.10 ximagesrc startx=${STARTX} starty=${STARTY} endx=${ENDX} endy=${ENDY} \
-                ! "video/x-raw-rgb,width=${WIDTH},height=${HEIGHT},framerate=15/1" \
-                ! ffmpegcolorspace \
-                ! v4l2sink device=/dev/video1 sync=0 \
+gst-launch-0.10 \
+    ximagesrc startx=${STARTX} starty=${STARTY} endx=${ENDX} endy=${ENDY} \
+    ! "video/x-raw-rgb,width=${WIDTH},height=${HEIGHT},framerate=${FRAMERATE}" \
+    ! ffmpegcolorspace \
+    ! v4l2sink device=${SINKDEV} sync=0
