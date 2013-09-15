@@ -28,11 +28,11 @@ VCODEC_OPTS="-vcodec libx264
              -psy-rd 0.00:0.00
              -subq 10
              -me_method umh
-             -me_range 24
+             -me_range 16
              -b-pyramid 2
              -b_strategy 2
              -bf 3
-             -refs 8
+             -refs 10
              -qcomp 0.80
              -weightp 2
              -weightb 1
@@ -40,7 +40,7 @@ VCODEC_OPTS="-vcodec libx264
              -qmax 51
              -rc-lookahead $(( ${FPS} * 2 / 3 ))
              -sc_threshold $(( ${FPS} * 3 ))
-             -x264opts ipratio=1.40"
+             -x264opts ipratio=1.14"
 
 # AAC コーデックパラメータ
 # ========================
