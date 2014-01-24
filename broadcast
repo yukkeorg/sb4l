@@ -10,7 +10,9 @@
 
 RTMP_URI="$1"
 STREAM="$2"
+
 SCRIPTDIR=$(cd -P $(dirname "$0") && pwd -P)
+DESTDIR=${DESTDIR:-$SCRIPTDIR}
 
 # --- Load config files
 if [ -e ${SCRIPTDIR}/config/global ]; then  
@@ -30,7 +32,7 @@ fi
 
 # --- Adjust parameter
 if [ "${RTMP_URI}" = "test" ]; then
-  FULL_OUTPUT_URI="${SCRIPTDIR}/test.flv"
+  FULL_OUTPUT_URI="${DESTDIR}/test.flv"
 else
   if [ -z "${STREAM}" ]; then 
     echo "Please specified RTMP_URI and STREAM."
