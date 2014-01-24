@@ -3,7 +3,7 @@
 # vim: expandtab ts=2 sts=2 sw=2
 
 # V4L2 MIXER
-# Copyright (c) 2011-2013, Yusuke Ohshima <createtool@yukke.org>
+# Copyright (c) 2011-2014, Yusuke Ohshima <sb4l@yukke.org>
 # All rights reserved.
 #
 # License: MIT
