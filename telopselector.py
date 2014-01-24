@@ -4,7 +4,13 @@
 from __future__ import print_function
 
 import sys
-import json
+try:
+    import ujson as json
+except ImportError:
+    try:
+        import simplejson as json
+    except:
+        import json
 from gi.repository import Gtk
 
 
@@ -18,8 +24,7 @@ class Group(list):
                 self.append(elems)
 
     def A(self, idx):
-        t = []
-        f = []
+        t, f = [], []
         for i, elem in enumerate(self):
             e = [ e for e in elem if e != "off" ]
             if i == idx:
@@ -33,11 +38,8 @@ class Window(Gtk.Window):
     def __init__(self, group):
         Gtk.Window.__init__(self, title="Telop Selector")
         self.group = group
-
-        self.connect("delete-event", Gtk.main_quit)
-
         self.set_border_width(10)
-
+        self.connect("delete-event", Gtk.main_quit)
         hbox = Gtk.Box(spacing=6)
         self.add(hbox)
 
@@ -64,5 +66,5 @@ def main(args):
     window.show_all()
     Gtk.main()
 
-main(sys.argv[1:])
-
+if __name__ == '__main__':
+    main(sys.argv[1:])
