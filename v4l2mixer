@@ -44,8 +44,9 @@ pygst.require('0.10')
 import gst
 
 
-SETTING_FILENAME = os.path.expanduser('~/.cameracapturerc')
+SETTING_FILENAME = os.path.expanduser('~/.v4l2mixer_state.pickle')
 N_TELOPS = 12
+N_FRAMES = 3
 
 
 _CCS_FORMAT = {
@@ -187,7 +188,8 @@ class V4l2Composer(object):
     self.player = gst.Pipeline('V4l2Mixer')
     #--
     self.camerasource = gst.element_factory_make('v4l2src')
-    self.framesvg = gst.element_factory_make('rsvgoverlay')
+    self.framesvgs = [ gst.element_factory_make('rsvgoverlay')
+                       for i in xrange(N_FRAMES) ]
     self.textoverlays = [ gst.element_factory_make('textoverlay') 
                              for i in xrange(N_TELOPS) ]
     self.v4l2sink = gst.element_factory_make('v4l2sink')
@@ -232,7 +234,8 @@ class V4l2Composer(object):
                        self.setting.source_framerate)
     capsfilter.set_property('caps', gst.caps_from_string(srccaps))
     capsfilter2.set_property('caps', 
-                             gst.caps_from_string('video/x-raw-yuv,format=(fourcc)YUY2'))
+                             gst.caps_from_string('video/x-raw-yuv,'
+                                                  'format=(fourcc)YUY2'))
 
     # queue
     #queue.set_property('leaky', 2)
@@ -250,7 +253,10 @@ class V4l2Composer(object):
       self.SetTelopText(i, text) 
 
     # rsvgoverlay
-    self.framesvg.set_property("location", self.setting.frame_svgfile)
+    for o in self.framesvgs[:N_FRAMES-1]:
+      o.set_property("location", "")
+    self.framesvgs[N_FRAMES-1].set_property("location",
+                                            self.setting.frame_svgfile)
 
     # sink
     self.monitorsink.set_property("sync", False)
@@ -264,9 +270,11 @@ class V4l2Composer(object):
         capsfilter,
         queue,
         sourcedecoder,
-        colorspace1,
-        self.framesvg, ]
-      + self.textoverlays
+        colorspace1,]
+      + self.framesvgs[:N_FRAMES-1]
+      + self.textoverlays[:(N_TELOPS//2)]
+      + [ self.framesvgs[N_FRAMES-1] ]
+      + self.textoverlays[(N_TELOPS//2):]
       + [ tee ]
       if e is not None 
     ]
@@ -364,8 +372,9 @@ class V4l2Composer(object):
       textoverlay.set_property("outline-color", 0)
 
   # RSvgOverlay
-  def SetFrameSvgFile(self, filepath):
-    self.framesvg.set_property("location", filepath)
+  def SetFrameSvgFile(self, index, filepath):
+    if index < N_FRAMES:
+      self.framesvgs[index].set_property("location", filepath)
 
   #############
   # Callbacks #
@@ -393,8 +402,8 @@ class V4l2Composer(object):
 
 
 class SpawnStdoutReader(object):
-  def __init__(self, commandline,
-               init_callback=None, read_callback=None, term_callback=None,
+  def __init__(self, commandline, init_callback=None, 
+               read_callback=None, term_callback=None,
                callback_args=None):
     self.commandline = commandline
     self.init_callback = init_callback
@@ -646,7 +655,7 @@ class V4l2MixerWindow(gtk.Window):
     self.ent_camera_height.set_text(self.setting.source_height)
     self.ent_camera_fps.set_text(self.setting.source_framerate)
     self.ent_sink.set_text(self.setting.sink_device)
-    self.setframe_btn.set_filename(self.setting.frame_svgfile)
+    self.setframe_btn.set_filename(self.setting.frame_svgfile or "")
     self.cmb_text_idx.set_active(0)
 
   ###############
@@ -776,9 +785,8 @@ class V4l2MixerWindow(gtk.Window):
   def on_setframe_changed(self, widget, *args):
     filepath = widget.get_filename()
     if self.player:
-      self.player.SetFrameSvgFile(filepath)
+      self.player.SetFrameSvgFile(N_FRAMES-1, filepath)
     self.setting.frame_svgfile = filepath
-    debugmsg("load frame svg file: {0}".format(filepath))
 
   # -- MainWindow signals
   def on_delete(self, widget, *args):
@@ -813,8 +821,12 @@ class V4l2MixerWindow(gtk.Window):
       return
     results = jsonProcessor(texts)
     for key, val in results:
-      if key == "framesvg":
-        self.player.SetFrameSvgFile(val)
+      if key.startswith(u"framesvg"):
+        try:
+          index = int(key[len(u"framesvg"):])
+        except:
+          index = N_FRAMES-1 
+        self.player.SetFrameSvgFile(index, val)
       else:
         try:
           self.player.SetTelopAtrribute(int(key), val)
@@ -851,9 +863,9 @@ def jsonProcessor(texts):
       if not isinstance(parsedata, dict):
         continue
       for k, v in parsedata.iteritems():
-        if k == u'framesvg':
+        if k.startswith(u'framesvg'):
           if os.path.exists(v):
-            result.append((u'framesvg', v))
+            result.append((k, v))
         elif k == 'hides':
           switchGroup(v, True)
         elif k == 'shows':
@@ -869,13 +881,9 @@ def main():
   gtk.gdk.threads_init()
   setting = V4l2ComposerSetting.Load(SETTING_FILENAME)
   cm = V4l2MixerWindow(setting)
-  try:
-    gtk.main()
-  except:
-    raise
+  gtk.main()
   setting.Save(SETTING_FILENAME)
 
 
 if __name__ == "__main__":
   main()
-
