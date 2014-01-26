@@ -1,7 +1,9 @@
 #!/usr/bin/python
 # coding: utf-8
 
-import sys, os
+import sys
+import os
+from optparse import OptionParser
 try:
     import ujson as json
 except ImportError:
@@ -48,7 +50,8 @@ class TextBuffer(object):
 
 
 class TextSwitcher(object):
-    def __init__(self, filename, color=None, fps=30, interval=3000, fadetime=180.0):
+    def __init__(self, target, filename, color=None, fps=30, interval=3000, fadetime=180.0):
+        self.target = target
         self.read_filename = filename
         self.default_interval = interval
         self.text_buffer = TextBuffer(eol='')
@@ -105,7 +108,7 @@ class TextSwitcher(object):
                 self.check = True
         if isoutput:
             color = (int(self.alpha) << 24) + self.textcolor
-            d = {"1": { "color": color, "text": self.nowtext } }
+            d = {self.target: { "color": color, "text": self.nowtext } }
             sys.stdout.write(json.dumps(d))
             sys.stdout.write("\0")
             sys.stdout.flush()
@@ -123,6 +126,10 @@ class TextSwitcher(object):
 
 
 if __name__ == '__main__':
-    app = TextSwitcher(sys.argv[1])
+    parser = OptionParser()
+    parser.add_option("-t", "--target", action="store", default="0")
+    (opt, args) = parser.parse_args()
+
+    app = TextSwitcher(opt.target, args[0])
     app.run()
 
