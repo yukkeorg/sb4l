@@ -13,18 +13,9 @@ from __future__ import print_function
 
 import os
 import sys
-import codecs
 import shlex
+import optparse
 import subprocess
-import signal
-import tempfile
-try:
-  import ujson as json
-except ImportError:
-  try:
-    import simplejson as json
-  except ImportError:
-    import json
 try:
   import cPickle as pickle
 except ImportError:
@@ -33,6 +24,13 @@ try:
   import cStringIO as StringIO
 except:
   import StringIO
+try:
+  import ujson as json
+except ImportError:
+  try:
+    import simplejson as json
+  except ImportError:
+    import json
 
 import pygtk
 pygtk.require('2.0')
@@ -72,32 +70,11 @@ def debugmsg(msg):
  sys.stderr.write(msg+"\n")
 
 
-class Jsonalizer(object):
-  def to_json(self, exclude=None):
-    if exclude is None:
-      d = self.__dict__
-    else:
-      d = dict((k, v) for k, v in self.__dict__ if k not in exclude)
-    pairs = []
-    return json.dumps(pairs)
-
-  def save(self, filename):
-    with open(filename, "wb") as f:
-      f.write(self.to_json())
-
-  def load(self, filename):
-    with open(filename, "rb") as f:
-      d = json.loads(f.read())
-    for k, v in self.__dict__:
-      if k in d:
-        self.__dict__[k] = d[k]
-
-
 class TelopSetting(object):
   def __init__(self,
                valignment=None, halignment=None, linealignment=None,
                xpad=None, ypad=None, fontdesc=None, text=None,
-               is_cmd=False, silent=None, color=None, xpos=None,
+               is_cmd=None, silent=None, color=None, xpos=None,
                ypos=None, alpha=None, *args, **kw):
     self.valignment = valignment
     self.halignment = halignment
@@ -152,8 +129,9 @@ class V4l2ComposerSetting(object):
 
   @staticmethod
   def Load(filename):
-    obj = V4l2ComposerSetting()
+    obj = None
     with open(filename, "rb") as f:
+      obj = V4l2ComposerSetting()
       o = pickle.load(f)
       if not isinstance(o, V4l2ComposerSetting):
         return obj
@@ -878,10 +856,24 @@ def jsonProcessor(texts):
 
 
 def main():
+  parser = optparse.OptionParser()
+  parser.add_option("-p", "--state-file", dest="statefile", 
+                    metavar="FILE", default=SETTING_FILENAME)
+  options, args = parser.parse_args()
+
   gtk.gdk.threads_init()
-  setting = V4l2ComposerSetting.Load(SETTING_FILENAME)
+
+  try:
+    setting = V4l2ComposerSetting.Load(options.statefile)
+  except IOError:
+    setting = V4l2ComposerSetting()
+
   cm = V4l2MixerWindow(setting)
-  gtk.main()
+  try:
+    gtk.main()
+  except KeyboardInterrupt:
+    pass
+
   setting.Save(SETTING_FILENAME)
 
 

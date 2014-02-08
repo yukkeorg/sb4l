@@ -6,6 +6,7 @@ WIDTH="${3:-1024}"
 HEIGHT="${4:-768}"
 FRAMERATE="${5:-15/1}"
 SINKDEV="${6:-/dev/video1}"
+
 ENDX=$((${STARTX} + ${WIDTH} - 1))
 ENDY=$((${STARTY} + ${HEIGHT} - 1))
 

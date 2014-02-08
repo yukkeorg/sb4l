@@ -6,5 +6,5 @@ _build
 bin
 *.mkv
 *.flv
-resource/_*
 tmp.*
+resource
