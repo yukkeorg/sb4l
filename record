@@ -7,12 +7,13 @@
 SCRIPTDIR=$(cd -P $(dirname "$0") && pwd -P)
 
 NOWTIME=$(date +'%Y%m%d%H%M%S')
-GLOBALCONF="${SCRIPTDIR}/config/global"
+GLOBALCONF="${SCRIPTDIR}/config/global.conf"
 OUTPUTDIR="${HOME}/Videos/Source"
 OUTPUTFILE="${OUTPUTDIR}/record-${NOWTIME}.mkv"
 
 FFMPEG_VCODECOPTS='-vcodec libx264 -q 20 -preset fast -tune zerolatency'
 FFMPEG_ACODECOPTS='-acodec flac'
+OUTPUT_OPTS='-f matroska'
 
 log() {
     echo "$1" >2 
@@ -27,11 +28,11 @@ fi
 
 [ -d "${OUTPUTDIR}" ] || mkdir "${OUTPUTDIR}"
 
-exec ${FFMPEG} \
-     -y -threads 4 \
+exec ${FFMPEG} -y -threads 0 \
      -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV} \
      -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV} \
      ${FFMPEG_VCODECOPTS} \
      ${FFMPEG_ACODECOPTS} \
-     -f matroska "${OUTPUTFILE}"
+     ${OUTPUT_OPTS} \
+     "${OUTPUTFILE}"
 

@@ -15,14 +15,14 @@ SCRIPTDIR=$(cd -P $(dirname "$0") && pwd -P)
 DESTDIR=${DESTDIR:-$SCRIPTDIR}
 
 # --- Load config files
-if [ -e ${SCRIPTDIR}/config/global ]; then  
-  . ${SCRIPTDIR}/config/global || exit 1
+if [ -e ${SCRIPTDIR}/config/global.conf ]; then  
+  . ${SCRIPTDIR}/config/global.conf || exit 1
 else
   echo "Can't open config/global file." >2
   exit 1
 fi
 
-BC_CONFFILE="${SCRIPTDIR}/config/broadcast.d/${BROADCASTER}"
+BC_CONFFILE="${SCRIPTDIR}/config/broadcast.d/${BROADCASTER}.conf"
 if [ -e "${BC_CONFFILE}" ]; then
   . ${BC_CONFFILE}
 else
@@ -44,7 +44,7 @@ else
 fi
 
 # --- Muxing video/audio and streaming to server.
-FFMPEGFULLCOMMAND="${FFMPEG}
+FFMPEGFULLCOMMAND="${FFMPEG} -y
        ${FFMPEGDEBUG} -threads ${FFMPEGTHREADS}
        -f ${VIDEO_SRC_FMT} -i ${VIDEO_SRC_DEV}
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV}

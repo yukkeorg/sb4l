@@ -1,14 +1,14 @@
 #!/bin/sh
 BASEDIR=$(cd -P $(dirname "$0"); pwd -P)
 
-if [ -e ${BASEDIR}/config/global ]; then
-  . ${BASEDIR}/config/global
+if [ -e ${BASEDIR}/config/global.conf ]; then
+  . ${BASEDIR}/config/global.conf
 else
   echo "Can't open config file." >2
   exit 1
 fi
 
-check_loaded_kernelmodule() { 
+check_loaded_kernelmodule() {
     cut -d ' ' -f 1 /proc/modules | grep -q "$1" >/dev/null 2>/dev/null
 }
 
