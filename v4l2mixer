@@ -53,16 +53,16 @@ _CCS_FORMAT = {
 }
 
 _CCS_HALIGN = {
-  'left'   : 0,
-  'center' : 1,
-  'right'  : 2,
+  'left'    : 0,
+  'center'  : 1,
+  'right'   : 2,
   'position': 3,
 }
 
 _CCS_VALIGN = {
-  'top'    : 0,
-  'center' : 1,
-  'bottom' : 2,
+  'top'      : 0,
+  'center'   : 1,
+  'bottom'   : 2,
   'position' : 3,
 }
 
@@ -90,36 +90,39 @@ class TelopSetting(object):
     self.ypos = ypos
     self.alpha = alpha
 
-  def update_from_dict(self, d):
+  def update(self, d):
+    if not isinstance(d, (dict, TelopSetting)):
+      return
+    if isinstance(d, TelopSetting):
+      d = d.__dict__
+
     for k in d:
       if k in self.__dict__:
         self.__dict__[k] = d[k]
 
-
-def CreateDefaultTelopSetting():
-  return TelopSetting(
-      valignment='top',
-      halignment='left',
-      linealignment='left',
-      xpad='0',
-      ypad='0',
-      fontdesc='Sans 10',
-      text='')
+  @classmethod
+  def default(cls):
+    return TelopSetting(
+        valignment='top',
+        halignment='left',
+        linealignment='left',
+        xpad='0',
+        ypad='0',
+        fontdesc='Sans 10',
+        text='')
 
 
 class V4l2ComposerSetting(object):
   SETTING_LATEST_VERSION = '1.1'
 
   def __init__(self):
-    self._version = self.SETTING_LATEST_VERSION
     self.source_device = '/dev/video0'
     self.source_format = 'MJPEG'
     self.source_width = '640'
     self.source_height = '480'
     self.source_framerate = '30/1'
     self.sink_device = '/dev/video1'
-    self.telops = [ CreateDefaultTelopSetting() 
-                      for i in xrange(N_TELOPS) ]
+    self.telops = [ TelopSetting.default() for i in xrange(N_TELOPS) ]
     self.frame_svgfile = ''
 
   def Save(self, filename):
@@ -132,23 +135,19 @@ class V4l2ComposerSetting(object):
     obj = None
     with open(filename, "rb") as f:
       obj = V4l2ComposerSetting()
-      o = pickle.load(f)
-      if not isinstance(o, V4l2ComposerSetting):
+      stored_obj = pickle.load(f)
+      if not isinstance(stored_obj, V4l2ComposerSetting):
         return obj
 
-      for k in ('source_device', 'source_format', 'source_width',
-                'source_height', 'source_framerate', 'sink_device',
-                'frame_svgfile'):
+      for k in stored_obj.__dict__:
+        if k in obj.__dict__:
+          obj.__dict__[k] = stored_obj.__dict__[k]
+
+      for i, o in enumerate(obj.telops):
         try:
-          obj.__dict__[k] = o.__dict__[k]
+          o.update(stored_obj.telops[i].__dict__)
         except:
-          sys.stderr.write("s."+k+"\n")
-      for i in range(len(obj.telops)):
-        for k in obj.telops[i].__dict__:
-          try:
-            obj.telops[i].__dict__[k] = o.telops[i].__dict__[k]
-          except:
-            sys.stderr.write("s.telops[{0}].{1}".format((i, k))+"\n")
+          pass
     return obj
 
 
@@ -242,20 +241,18 @@ class V4l2Composer(object):
     ####################
     # Linking Elements #
     ####################
-    source_elements = [
-      e for e in [
-        self.camerasource,
-        capsfilter,
-        queue,
-        sourcedecoder,
-        colorspace1,]
-      + self.framesvgs[:N_FRAMES-1]
-      + self.textoverlays[:(N_TELOPS//2)]
-      + [ self.framesvgs[N_FRAMES-1] ]
-      + self.textoverlays[(N_TELOPS//2):]
-      + [ tee ]
-      if e is not None 
-    ]
+    half_of_telops = N_TELOPS // 2
+    source_elements = ([self.camerasource,
+                        capsfilter,
+                        queue,
+                        sourcedecoder,
+                        colorspace1 ]
+                       + [ self.framesvgs[0] ]
+                       + self.textoverlays[:half_of_telops]
+                       + self.framesvgs[1:]
+                       + self.textoverlays[half_of_telops:]
+                       + [ tee ])
+    source_elements = [ e for e in source_elements if e is not None ]
 
     v4l2output_elements = [
       queue2,
@@ -458,7 +455,7 @@ class V4l2MixerWindow(gtk.Window):
     self.set_values()
 
   def build_window(self):
-    self.set_title("V4l2 Comporser")
+    self.set_title("V4l2 Video Mixer")
     self.set_default_size(800, 600)
     self.connect("delete-event", self.on_delete)
     self.connect("destroy", self.on_destroy)
@@ -850,7 +847,7 @@ def jsonProcessor(texts):
           switchGroup(v, False)
         elif isinstance(v, dict):
           ts = TelopSetting()
-          ts.update_from_dict(v)
+          ts.update(v)
           result.append((k, ts))
   return result
 
