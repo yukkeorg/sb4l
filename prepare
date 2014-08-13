@@ -12,10 +12,6 @@ check_loaded_kernelmodule() {
     cut -d ' ' -f 1 /proc/modules | grep -q "$1" >/dev/null 2>/dev/null
 }
 
-if ! check_loaded_kernelmodule v4l2loopback; then
-   sudo modprobe v4l2loopback ${V4L2LOOPBACK_OPTIONS}
-fi
-
 exec_if_exist() {
     local COMMAND="$1"
     shift
@@ -26,7 +22,12 @@ exec_if_exist() {
     fi
 }
 
-exec_if_exist guvcview -d "${CAMERADEVICE}" -o >/dev/null 2>&1 &
+
+if ! check_loaded_kernelmodule v4l2loopback; then
+   sudo modprobe v4l2loopback ${V4L2LOOPBACK_OPTIONS}
+fi
+
+exec_if_exist guvcview -d "${CAMERADEVICE}" -z >/dev/null 2>&1 &
 exec_if_exist pavucontrol &
 exec_if_exist ${BASEDIR}/v4l2mixer &
 
