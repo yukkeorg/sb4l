@@ -3,8 +3,9 @@
 # broadcast
 # =========
 # This is script which broadcast with ffmpeg.
-# Sorry, this is for Linix only.
-# # Required extra tools:
+#
+# Required extra tools:
+#
 #  - ffmpeg ver.N-37669 or later (compiling with librtmp, libx264 and libfaac)
 # 
 
@@ -14,21 +15,11 @@ STREAM="$2"
 SCRIPTDIR=$(cd -P $(dirname "$0") && pwd -P)
 DESTDIR=${DESTDIR:-$SCRIPTDIR}
 
-# --- Load config files
-if [ -e ${SCRIPTDIR}/config/global.conf ]; then  
-  . ${SCRIPTDIR}/config/global.conf || exit 1
-else
-  echo "Can't open config/global file." >2
-  exit 1
-fi
+. ${SCRIPTDIR}/shlib/functions.sh
 
-BC_CONFFILE="${SCRIPTDIR}/config/broadcast.d/${BROADCASTER}.conf"
-if [ -e "${BC_CONFFILE}" ]; then
-  . ${BC_CONFFILE}
-else
-  echo "Can't open ${BC_CONFFILE}" >2
-  exit 2
-fi
+# --- Load config files
+include ${SCRIPTDIR}/config/global.conf
+include ${SCRIPTDIR}/config/broadcast.d/${BROADCASTER}.conf
 
 # --- Adjust parameter
 if [ "${RTMP_URI}" = "test" ]; then
@@ -50,7 +41,8 @@ FFMPEGFULLCOMMAND="${FFMPEG} -y
        -f ${AUDIO_SRC_FMT} -i ${AUDIO_SRC_DEV}
        ${VCODEC_OPTS} ${ACODEC_OPTS} \
        ${OUTPUT_OPTS} ${FULL_OUTPUT_URI}"
-/bin/echo -e "FFMPEG Command:\n" $FFMPEGFULLCOMMAND
+
+echo -e "FFMPEG Command:\n" $FFMPEGFULLCOMMAND
 exec $FFMPEGFULLCOMMAND
 
 

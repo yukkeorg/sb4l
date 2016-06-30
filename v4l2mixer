@@ -102,7 +102,6 @@ class TelopSetting(object):
             return
         if isinstance(d, TelopSetting):
             d = d.__dict__
-
         for k in d:
             if k in self.__dict__:
                 self.__dict__[k] = d[k]
@@ -193,9 +192,9 @@ class V4l2Composer(object):
         queue = Gst.element_factory_make("queue")
         queue2 = Gst.element_factory_make("queue")
         queue3 = Gst.element_factory_make("queue")
-        colorspace1 = Gst.element_factory_make("ffmpegcolorspace")
-        colorspace2 = Gst.element_factory_make("ffmpegcolorspace")
-        colorspace3 = Gst.element_factory_make("ffmpegcolorspace")
+        colorspace1 = Gst.element_factory_make("videoconvert")
+        colorspace2 = Gst.element_factory_make("videoconvert")
+        colorspace3 = Gst.element_factory_make("videoconvert")
 
         ########################
         # Configuring Elements #

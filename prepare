@@ -1,34 +1,12 @@
 #!/bin/sh
 BASEDIR=$(cd -P $(dirname "$0"); pwd -P)
 
-if [ -e ${BASEDIR}/config/global.conf ]; then
-  . ${BASEDIR}/config/global.conf
-else
-  echo "Can't open config file." >2
-  exit 1
-fi
+. $BASEDIR/shlib/functions.sh
 
-check_loaded_kernelmodule() {
-    cut -d ' ' -f 1 /proc/modules | grep -q "$1" >/dev/null 2>/dev/null
-}
+include ${BASEDIR}/config/global.conf
 
-exec_if_exist() {
-    local COMMAND="$1"
-    shift
-    if which "$COMMAND"; then
-        "$COMMAND" "$@"
-    else
-        echo "WARNING: $COMMAND is not found."
-    fi
-}
-
-
-if ! check_loaded_kernelmodule v4l2loopback; then
-   sudo modprobe v4l2loopback ${V4L2LOOPBACK_OPTIONS}
-fi
+load_kmod_if_not v4l2loopback ${V4L2LOOPBACK_OPTIONS}
 
 exec_if_exist guvcview -d "${CAMERADEVICE}" -z >/dev/null 2>&1 &
 exec_if_exist pavucontrol &
 exec_if_exist ${BASEDIR}/v4l2mixer &
-
-
